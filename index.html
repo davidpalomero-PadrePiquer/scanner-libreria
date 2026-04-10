@@ -12,7 +12,6 @@
     .header { background: #1a237e; padding: 14px 16px; text-align: center; font-weight: bold; font-size: 1.1rem; display: flex; align-items: center; justify-content: center; gap: 8px; }
     .badge { background: #ff6f00; padding: 4px 12px; border-radius: 20px; font-size: 0.85rem; }
 
-    /* ── Setup ── */
     #setup { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 24px; gap: 20px; }
     #setup h2 { font-size: 1.3rem; }
     #setup .field { width: 100%; max-width: 400px; }
@@ -22,13 +21,13 @@
     #setup .hint { font-size: 0.8rem; color: #888; margin-top: 4px; }
     .btn-start { background: #2e7d32; color: white; border: none; padding: 14px 32px; border-radius: 10px; font-size: 1.1rem; font-weight: bold; cursor: pointer; display: flex; align-items: center; gap: 8px; }
 
-    /* ── Scanner ── */
     #scanner { display: none; flex: 1; flex-direction: column; }
     #reader-container { flex: 1; position: relative; background: #000; display: flex; justify-content: center; align-items: center; overflow: hidden; }
     #camera-stream { width: 100%; height: 100%; object-fit: cover; }
     canvas { display: none; }
+    /* Imagen oculta para que ZXing la lea */
+    #snapImg { display: none; }
 
-    /* Botón ESCANEAR grande sobre el vídeo */
     #btnScan {
       position: absolute; bottom: 20px; left: 50%; transform: translateX(-50%);
       padding: 18px 50px; font-size: 22px; font-weight: bold;
@@ -56,7 +55,6 @@
     <span class="material-symbols-outlined" style="font-size:64px; color:#ff6f00;">qr_code_scanner</span>
     <h2>Escáner Móvil</h2>
     <p style="color:#aaa; text-align:center; max-width:350px;">Conecta este teléfono a una caja registradora para escanear códigos de barras de libros.</p>
-
     <div class="field">
       <label>URL del sistema (Apps Script)</label>
       <input type="url" id="inputUrl" placeholder="https://script.google.com/macros/s/.../exec" />
@@ -82,6 +80,7 @@
     <div id="reader-container">
       <video id="camera-stream" autoplay playsinline muted></video>
       <canvas id="scanCanvas"></canvas>
+      <img id="snapImg" />
       <button id="btnScan" onclick="escanear()">
         <span class="material-symbols-outlined">center_focus_strong</span> ESCANEAR
       </button>
@@ -103,7 +102,6 @@
     var stream = null;
     var codeReader = null;
 
-    // ── Persistencia ──
     function guardarConfig() {
       try { localStorage.setItem('scanner_url', API_URL); localStorage.setItem('scanner_caja', CAJA); } catch(e) {}
     }
@@ -116,7 +114,6 @@
       } catch(e) {}
     }
 
-    // ── Iniciar / volver ──
     function iniciar() {
       var url = document.getElementById('inputUrl').value.trim();
       var caja = document.getElementById('inputCaja').value.trim();
@@ -141,17 +138,15 @@
       document.getElementById('setup').style.display = 'flex';
     }
 
-    // ── UI ──
     function setStatus(text, type, icon) {
       document.getElementById('statusRow').className = 'status-row ' + (type || 'ready');
       document.getElementById('statusIcon').textContent = icon || 'center_focus_strong';
       document.getElementById('statusText').textContent = text;
     }
 
-    // ══════════════════════════════════════════
-    //  CÁMARA: solo previsualización en vivo
-    //  NO escanea nada hasta pulsar el botón
-    // ══════════════════════════════════════════
+    // ══════════════════════════════════════
+    //  CÁMARA: solo previsualización
+    // ══════════════════════════════════════
     function abrirCamara() {
       var videoEl = document.getElementById('camera-stream');
 
@@ -165,12 +160,11 @@
           document.getElementById('btnScan').disabled = false;
         })
         .catch(function(err) {
-          console.error('Camera error:', err);
           setStatus('Error de cámara: ' + err.message, 'error', 'no_photography');
           document.getElementById('btnScan').disabled = true;
         });
 
-      // Preparar ZXing para decodificar frames sueltos (no continuo)
+      // ZXing con hints para códigos de barras
       var hints = new Map();
       hints.set(ZXing.DecodeHintType.POSSIBLE_FORMATS, [
         ZXing.BarcodeFormat.EAN_13,
@@ -189,10 +183,9 @@
       if (codeReader) { codeReader.reset(); codeReader = null; }
     }
 
-    // ══════════════════════════════════════════
-    //  ESCANEAR: captura UN frame y lo analiza
-    //  Solo se ejecuta al pulsar el botón
-    // ══════════════════════════════════════════
+    // ══════════════════════════════════════
+    //  ESCANEAR: captura frame → imagen → ZXing
+    // ══════════════════════════════════════
     function escanear() {
       var videoEl = document.getElementById('camera-stream');
       var canvas = document.getElementById('scanCanvas');
@@ -207,25 +200,29 @@
       setStatus('Analizando...', 'sending', 'search');
       if (navigator.vibrate) navigator.vibrate(50);
 
-      // Capturar frame actual del vídeo
+      // 1. Capturar frame del vídeo al canvas
       canvas.width = videoEl.videoWidth;
       canvas.height = videoEl.videoHeight;
       var ctx = canvas.getContext('2d');
       ctx.drawImage(videoEl, 0, 0, canvas.width, canvas.height);
 
-      // Decodificar el frame con ZXing
-      codeReader.decodeFromCanvas(canvas)
-        .then(function(result) {
-          var code = result.getText();
-          if (code && code.length >= 8) {
-            enviarALaCaja(code);
-          } else {
+      // 2. Canvas → dataURL → elemento <img> → ZXing lo lee
+      var imgEl = document.getElementById('snapImg');
+      imgEl.onload = function() {
+        codeReader.decodeFromImageElement(imgEl)
+          .then(function(result) {
+            var code = result.getText();
+            if (code && code.length >= 8) {
+              enviarALaCaja(code);
+            } else {
+              noDetectado();
+            }
+          })
+          .catch(function(err) {
             noDetectado();
-          }
-        })
-        .catch(function(err) {
-          noDetectado();
-        });
+          });
+      };
+      imgEl.src = canvas.toDataURL('image/png');
     }
 
     function noDetectado() {
@@ -236,7 +233,6 @@
       }, 1500);
     }
 
-    // ── Enviar a la caja ──
     async function enviarALaCaja(code) {
       if (navigator.vibrate) navigator.vibrate(100);
       setStatus('Enviando ' + code + '...', 'sending', 'wifi_tethering');
@@ -245,7 +241,6 @@
         var sep = API_URL.includes('?') ? '&' : '?';
         var url = API_URL + sep + 'page=api&action=setScannerCode&caja=' + encodeURIComponent(CAJA) + '&codigo=' + encodeURIComponent(code);
         await fetch(url, { mode: 'no-cors' });
-
         setStatus('Enviado ✓  ' + code, 'success', 'check_circle');
         document.getElementById('lastCode').textContent = 'Último: ' + code;
       } catch (e) {
@@ -258,7 +253,6 @@
       }, 1500);
     }
 
-    // ── Arranque ──
     cargarConfig();
     window.addEventListener('beforeunload', cerrarCamara);
   </script>
