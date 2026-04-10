@@ -1,0 +1,284 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>Escáner Móvil</title>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200" />
+  <script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.js"></script>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: 'Segoe UI', sans-serif; background: #121212; color: white; height: 100vh; display: flex; flex-direction: column; overflow: hidden; }
+
+    .header { background: #1a237e; padding: 14px 16px; text-align: center; font-weight: bold; font-size: 1.1rem; display: flex; align-items: center; justify-content: center; gap: 8px; }
+    .badge { background: #ff6f00; padding: 4px 12px; border-radius: 20px; font-size: 0.85rem; }
+
+    /* ── Pantalla de configuración ── */
+    #setup { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 24px; gap: 20px; }
+    #setup h2 { font-size: 1.3rem; }
+    #setup .field { width: 100%; max-width: 400px; }
+    #setup label { display: block; font-size: 0.85rem; color: #aaa; margin-bottom: 6px; }
+    #setup input { width: 100%; padding: 12px; border: 2px solid #333; border-radius: 8px; background: #1e1e1e; color: white; font-size: 1rem; }
+    #setup input:focus { border-color: #ff6f00; outline: none; }
+    #setup .hint { font-size: 0.8rem; color: #888; margin-top: 4px; }
+    .btn-start { background: #2e7d32; color: white; border: none; padding: 14px 32px; border-radius: 10px; font-size: 1.1rem; font-weight: bold; cursor: pointer; display: flex; align-items: center; gap: 8px; }
+
+    /* ── Pantalla de escaneo ── */
+    #scanner { display: none; flex: 1; flex-direction: column; }
+    #reader-container { flex: 1; position: relative; background: #000; display: flex; justify-content: center; align-items: center; }
+    #camera-stream { width: 100%; height: 100%; object-fit: cover; position: absolute; }
+    canvas { display: none; }
+    .scan-guide { position: absolute; width: 75%; max-width: 320px; height: 100px; border: 3px solid rgba(0,255,0,0.5); border-radius: 12px; pointer-events: none; z-index: 2; }
+
+    .status-bar { padding: 16px; text-align: center; min-height: 110px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 10px; }
+    .status-row { display: flex; align-items: center; gap: 8px; font-weight: 600; font-size: 1rem; }
+    .status-row.success { color: #4caf50; }
+    .status-row.sending { color: #ffeb3b; }
+    .status-row.error { color: #f44336; }
+    .status-row.ready { color: #b0bec5; }
+
+    .btn-native { background: #fff; color: #121212; border: none; padding: 10px 16px; border-radius: 8px; font-size: 0.9rem; font-weight: bold; display: flex; align-items: center; gap: 6px; cursor: pointer; }
+    input[type="file"] { display: none; }
+    .last-code { font-size: 0.8rem; color: #888; margin-top: 4px; }
+    .btn-change { background: rgba(255,255,255,0.15); color: #ccc; border: none; padding: 6px 14px; border-radius: 6px; font-size: 0.8rem; cursor: pointer; margin-top: 4px; }
+  </style>
+</head>
+<body>
+
+  <!-- ══════════════════════════════════════ -->
+  <!--  PANTALLA 1: CONFIGURACIÓN INICIAL    -->
+  <!-- ══════════════════════════════════════ -->
+  <div id="setup">
+    <span class="material-symbols-outlined" style="font-size:64px; color:#ff6f00;">qr_code_scanner</span>
+    <h2>Escáner Móvil</h2>
+    <p style="color:#aaa; text-align:center; max-width:350px;">Conecta este teléfono a una caja registradora para escanear códigos de barras.</p>
+
+    <div class="field">
+      <label>URL del sistema (Apps Script)</label>
+      <input type="url" id="inputUrl" placeholder="https://script.google.com/macros/s/.../exec" />
+      <div class="hint">Pega aquí la URL de tu webapp de Google Apps Script</div>
+    </div>
+
+    <div class="field">
+      <label>Número de Caja</label>
+      <input type="number" id="inputCaja" value="1" min="1" max="99" />
+    </div>
+
+    <button class="btn-start" onclick="iniciar()">
+      <span class="material-symbols-outlined">play_arrow</span> Iniciar escáner
+    </button>
+    <div id="setupError" style="color:#f44; font-size:0.9rem; display:none;"></div>
+  </div>
+
+  <!-- ══════════════════════════════════════ -->
+  <!--  PANTALLA 2: ESCÁNER ACTIVO           -->
+  <!-- ══════════════════════════════════════ -->
+  <div id="scanner">
+    <div class="header">
+      <span class="material-symbols-outlined">qr_code_scanner</span> Escáner Móvil
+      <span class="badge" id="badgeCaja">CAJA 1</span>
+    </div>
+
+    <div id="reader-container">
+      <video id="camera-stream" autoplay playsinline muted></video>
+      <canvas id="scanCanvas"></canvas>
+      <div class="scan-guide"></div>
+    </div>
+
+    <div class="status-bar">
+      <div class="status-row ready" id="statusRow">
+        <span class="material-symbols-outlined" id="statusIcon">center_focus_strong</span>
+        <span id="statusText">Iniciando cámara...</span>
+      </div>
+      <div class="last-code" id="lastCode"></div>
+
+      <label class="btn-native" id="btnFallback" style="display:none;">
+        <span class="material-symbols-outlined">photo_camera</span> Hacer foto al código
+        <input type="file" accept="image/*" capture="environment" id="fileInput" onchange="leerDeFoto(event)">
+      </label>
+
+      <button class="btn-change" onclick="volver()">Cambiar caja / URL</button>
+    </div>
+  </div>
+
+  <script>
+    // ── ESTADO ──
+    let API_URL = '';
+    let CAJA = '1';
+    let isProcessing = false;
+    let scanInterval = null;
+    let stream = null;
+
+    // ── PERSISTENCIA LOCAL ──
+    function guardarConfig() {
+      try {
+        localStorage.setItem('scanner_url', API_URL);
+        localStorage.setItem('scanner_caja', CAJA);
+      } catch(e) {}
+    }
+    function cargarConfig() {
+      try {
+        var url = localStorage.getItem('scanner_url');
+        var caja = localStorage.getItem('scanner_caja');
+        if (url) document.getElementById('inputUrl').value = url;
+        if (caja) document.getElementById('inputCaja').value = caja;
+      } catch(e) {}
+    }
+
+    // ── INICIAR ──
+    function iniciar() {
+      var url = document.getElementById('inputUrl').value.trim();
+      var caja = document.getElementById('inputCaja').value.trim();
+      var errEl = document.getElementById('setupError');
+
+      if (!url || !url.includes('script.google.com')) {
+        errEl.textContent = 'Introduce una URL válida de Google Apps Script';
+        errEl.style.display = 'block';
+        return;
+      }
+      if (!caja || parseInt(caja) < 1) {
+        errEl.textContent = 'Introduce un número de caja válido';
+        errEl.style.display = 'block';
+        return;
+      }
+
+      API_URL = url;
+      CAJA = caja;
+      guardarConfig();
+
+      document.getElementById('badgeCaja').textContent = 'CAJA ' + CAJA;
+      document.getElementById('setup').style.display = 'none';
+      document.getElementById('scanner').style.display = 'flex';
+
+      startScanner();
+    }
+
+    function volver() {
+      stopScanner();
+      document.getElementById('scanner').style.display = 'none';
+      document.getElementById('setup').style.display = 'flex';
+    }
+
+    // ── API: comunicación con GAS vía fetch ──
+    async function enviarCodigo(codigo) {
+      var separator = API_URL.includes('?') ? '&' : '?';
+      var url = API_URL + separator + 'page=api&action=setScannerCode&caja=' + encodeURIComponent(CAJA) + '&codigo=' + encodeURIComponent(codigo);
+
+      var response = await fetch(url, { mode: 'no-cors' });
+      // GAS con mode:'no-cors' devuelve opaque response (status 0)
+      // pero la petición SÍ llega al servidor y se ejecuta
+      return { ok: true };
+    }
+
+    // ── UI helpers ──
+    function setStatus(text, type, icon) {
+      var row = document.getElementById('statusRow');
+      row.className = 'status-row ' + (type || 'ready');
+      document.getElementById('statusIcon').textContent = icon || 'center_focus_strong';
+      document.getElementById('statusText').textContent = text;
+    }
+
+    // ── ENVIAR CÓDIGO A LA CAJA ──
+    async function onScanSuccess(code) {
+      if (isProcessing) return;
+      isProcessing = true;
+
+      if (navigator.vibrate) navigator.vibrate(100);
+      setStatus('Enviando ' + code + '...', 'sending', 'wifi_tethering');
+
+      try {
+        await enviarCodigo(code);
+        setStatus('Enviado ✓', 'success', 'check_circle');
+        document.getElementById('lastCode').textContent = 'Último: ' + code;
+      } catch (e) {
+        setStatus('Error de red', 'error', 'error_outline');
+      }
+
+      setTimeout(function() {
+        setStatus('Apunta al código del libro', 'ready', 'center_focus_strong');
+        isProcessing = false;
+      }, 1500);
+    }
+
+    // ══════════════════════════════════════════
+    //  MOTOR DE CÁMARA — getUserMedia + jsQR
+    // ══════════════════════════════════════════
+    function startScanner() {
+      var videoEl = document.getElementById('camera-stream');
+      var canvas  = document.getElementById('scanCanvas');
+      var ctx     = canvas.getContext('2d');
+
+      navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } })
+        .then(function(mediaStream) {
+          stream = mediaStream;
+          videoEl.srcObject = mediaStream;
+          videoEl.setAttribute('playsinline', 'true');
+          videoEl.play();
+
+          setStatus('Apunta al código del libro', 'ready', 'center_focus_strong');
+          document.getElementById('btnFallback').style.display = 'flex';
+
+          // Bucle de escaneo cada 250ms
+          scanInterval = setInterval(function() {
+            if (isProcessing) return;
+            if (videoEl.readyState !== videoEl.HAVE_ENOUGH_DATA) return;
+
+            canvas.width  = videoEl.videoWidth;
+            canvas.height = videoEl.videoHeight;
+            ctx.drawImage(videoEl, 0, 0, canvas.width, canvas.height);
+
+            var imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+            var qr = jsQR(imageData.data, imageData.width, imageData.height);
+
+            if (qr && qr.data && qr.data.length >= 10) {
+              onScanSuccess(qr.data);
+            }
+          }, 250);
+        })
+        .catch(function(err) {
+          console.warn('Camera error:', err.name, err.message);
+          setStatus('Cámara no disponible — usa foto', 'error', 'no_photography');
+          document.getElementById('camera-stream').style.display = 'none';
+          document.getElementById('btnFallback').style.display = 'flex';
+        });
+    }
+
+    function stopScanner() {
+      if (scanInterval) { clearInterval(scanInterval); scanInterval = null; }
+      if (stream) { stream.getTracks().forEach(function(t) { t.stop(); }); stream = null; }
+    }
+
+    // ── PLAN B: FOTO NATIVA ──
+    function leerDeFoto(event) {
+      var file = event.target.files[0];
+      if (!file) return;
+
+      setStatus('Analizando foto...', 'sending', 'search');
+
+      var img = new Image();
+      img.onload = function() {
+        var c = document.createElement('canvas');
+        c.width = img.width;
+        c.height = img.height;
+        var cx = c.getContext('2d');
+        cx.drawImage(img, 0, 0);
+        var data = cx.getImageData(0, 0, c.width, c.height);
+        var qr = jsQR(data.data, data.width, data.height);
+
+        if (qr && qr.data) {
+          onScanSuccess(qr.data);
+        } else {
+          setStatus('Código no detectado — reintenta', 'error', 'warning');
+          setTimeout(function() { setStatus('Apunta al código del libro', 'ready', 'center_focus_strong'); }, 2000);
+        }
+        document.getElementById('fileInput').value = '';
+      };
+      img.src = URL.createObjectURL(file);
+    }
+
+    // ── ARRANQUE ──
+    cargarConfig();
+    window.addEventListener('beforeunload', stopScanner);
+  </script>
+</body>
+</html>
