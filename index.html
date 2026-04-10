@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-  <title>Librería Escáner</title>
+  <title>Escáner de Librería</title>
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200" />
   
   <script type="text/javascript" src="https://unpkg.com/@zxing/library@latest"></script>
@@ -12,156 +12,218 @@
     * { box-sizing: border-box; margin: 0; padding: 0; }
     body { font-family: 'Segoe UI', sans-serif; background: #121212; color: white; height: 100vh; display: flex; flex-direction: column; overflow: hidden; }
 
-    .header { background: #1a237e; padding: 14px 16px; text-align: center; font-weight: bold; font-size: 1.1rem; display: flex; align-items: center; justify-content: center; gap: 8px; z-index: 20;}
-    .badge { padding: 4px 12px; border-radius: 20px; font-size: 0.85rem; background: #c62828; color: white; transition: background 0.3s;}
-    .badge.linked { background: #2e7d32; }
-
-    #reader-container { flex: 1; display: flex; flex-direction: column; justify-content: center; align-items: center; position: relative; background: #000;}
-    #camera-stream { width: 100%; height: 100%; object-fit: cover; position: absolute; top:0; left:0;}
+    .header { background: #1a237e; padding: 16px; text-align: center; font-weight: bold; font-size: 1.2rem; display: flex; align-items: center; justify-content: center; gap: 8px; z-index: 10;}
     
-    .scan-guide { position: absolute; width: 85%; max-width: 400px; height: 150px; border: 2px dashed rgba(255, 255, 255, 0.5); border-radius: 12px; pointer-events: none; display: flex; align-items: center; justify-content: center;}
-    .scan-guide::after { content: ''; width: 100%; height: 2px; background: rgba(255, 0, 0, 0.6); box-shadow: 0 0 10px red; }
+    /* Vistas principales */
+    .view { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 20px; text-align: center; }
+    .hidden { display: none !important; }
 
-    /* Overlay para feedback visual (Aciertos y Errores) */
-    #overlay { position: absolute; top: 0; left: 0; width: 100%; height: 100%; z-index: 10; display: flex; flex-direction: column; align-items: center; justify-content: center; background: rgba(0,0,0,0.8); opacity: 0; pointer-events: none; transition: opacity 0.2s; }
-    #overlay.visible { opacity: 1; pointer-events: auto; }
-    #overlay-icon { font-size: 4rem; margin-bottom: 10px; }
-    #overlay-text { font-size: 1.2rem; font-weight: bold; text-align: center; padding: 0 20px; }
+    /* Botones principales */
+    .btn-main { background: #ff6f00; color: white; border: none; padding: 18px 30px; border-radius: 12px; font-size: 1.2rem; font-weight: bold; cursor: pointer; display: flex; align-items: center; gap: 10px; width: 100%; max-width: 300px; justify-content: center; box-shadow: 0 4px 12px rgba(255, 111, 0, 0.4); margin-bottom: 20px;}
+    .btn-main:active { transform: scale(0.98); }
+    
+    .btn-secondary { background: transparent; color: #ffab91; border: 2px solid #ffab91; padding: 12px 20px; border-radius: 8px; font-size: 1rem; font-weight: bold; cursor: pointer; display: flex; align-items: center; gap: 8px; }
+
+    /* Contenedor Modal de la Cámara */
+    #camera-modal { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: #000; z-index: 50; display: flex; flex-direction: column; }
+    #video-container { flex: 1; position: relative; display: flex; justify-content: center; align-items: center; overflow: hidden;}
+    video { width: 100%; height: 100%; object-fit: cover; position: absolute; top:0; left:0;}
+    
+    /* Guías visuales para la cámara */
+    .scan-guide { position: absolute; border: 3px solid rgba(0, 255, 0, 0.7); box-shadow: 0 0 0 4000px rgba(0,0,0,0.6); pointer-events: none; transition: all 0.3s;}
+    .guide-qr { width: 250px; height: 250px; border-radius: 16px; }
+    .guide-barcode { width: 90%; max-width: 400px; height: 150px; border-radius: 12px; }
+    .guide-barcode::after { content: ''; display: block; width: 100%; height: 2px; background: red; position: absolute; top: 50%; box-shadow: 0 0 10px red; }
+
+    .camera-controls { padding: 20px; background: #111; display: flex; justify-content: center; gap: 15px;}
+    .btn-cancel { background: #444; color: white; border: none; padding: 15px 30px; border-radius: 8px; font-size: 1rem; font-weight: bold; cursor: pointer; }
+
+    /* Notificaciones */
+    #notification { position: fixed; top: 20px; left: 50%; transform: translateX(-50%); background: #333; color: white; padding: 12px 24px; border-radius: 30px; font-weight: bold; z-index: 100; display: flex; align-items: center; gap: 8px; box-shadow: 0 4px 12px rgba(0,0,0,0.5); opacity: 0; pointer-events: none; transition: opacity 0.3s;}
+    #notification.visible { opacity: 1; }
+    #notification.success { background: #2e7d32; }
+    #notification.error { background: #c62828; }
+    
+    .status-text { font-size: 0.9rem; color: #aaa; margin-bottom: 30px; }
+    .highlight-box { background: rgba(255,255,255,0.1); padding: 10px 20px; border-radius: 8px; margin-bottom: 30px; font-size: 1.5rem; font-weight: bold; color: #4caf50;}
   </style>
 </head>
 <body>
 
+  <div id="notification"><span class="material-symbols-outlined" id="notif-icon">info</span> <span id="notif-text">Mensaje</span></div>
+
   <div class="header">
-    <span class="material-symbols-outlined">qr_code_scanner</span> Escáner
-    <span class="badge" id="headerBadge">NO VINCULADO</span>
+    <span class="material-symbols-outlined">qr_code_scanner</span> Escáner Móvil
   </div>
 
-  <div id="reader-container">
-    <video id="camera-stream" autoplay playsinline muted></video>
-    <div class="scan-guide"></div>
+  <div id="view-setup" class="view">
+    <span class="material-symbols-outlined" style="font-size: 4rem; color: #555; margin-bottom: 10px;">phonelink_setup</span>
+    <h2 style="margin-bottom: 10px;">Caja No Vinculada</h2>
+    <p class="status-text">Apunta al código QR de la pantalla del ordenador para conectar este móvil a la caja.</p>
     
-    <div id="overlay">
-      <span class="material-symbols-outlined" id="overlay-icon">info</span>
-      <div id="overlay-text">Mensaje</div>
+    <button class="btn-main" onclick="startCamera('qr')">
+      <span class="material-symbols-outlined">qr_code</span> Escanear QR de Caja
+    </button>
+  </div>
+
+  <div id="view-scanner" class="view hidden">
+    <span class="material-symbols-outlined" style="font-size: 4rem; color: #4caf50; margin-bottom: 10px;">point_of_sale</span>
+    <h2 style="margin-bottom: 10px;">Escáner Activo</h2>
+    <div class="highlight-box" id="caja-label">CAJA -</div>
+    
+    <button class="btn-main" onclick="startCamera('barcode')">
+      <span class="material-symbols-outlined">barcode_scanner</span> Escanear Libro
+    </button>
+
+    <div style="margin-top: 20px; padding-top: 20px; border-top: 1px solid #333; width: 100%; display: flex; justify-content: center;">
+      <button class="btn-secondary" onclick="unlinkCaja()">
+        <span class="material-symbols-outlined">link_off</span> Desvincular Caja
+      </button>
+    </div>
+  </div>
+
+  <div id="camera-modal" class="hidden">
+    <div style="padding: 15px; text-align: center; background: #111; font-weight: bold; color: #ccc;" id="camera-title">
+      Apunta al código
+    </div>
+    <div id="video-container">
+      <video id="video" autoplay playsinline muted></video>
+      <div id="scan-guide" class="scan-guide"></div>
+    </div>
+    <div class="camera-controls">
+      <button class="btn-cancel" onclick="stopCamera()">Cancelar</button>
     </div>
   </div>
 
   <script>
-    let isProcessing = false;
     const codeReader = new ZXing.BrowserMultiFormatReader();
-    const videoElement = document.getElementById('camera-stream');
+    let currentMode = ''; // 'qr' o 'barcode'
 
-    // ── GESTIÓN DE LA INTERFAZ Y EL OVERLAY ──
-    function checkStatus() {
+    // ── GESTIÓN DE VISTAS ──
+    function initApp() {
       const url = localStorage.getItem('apiUrl');
       const caja = localStorage.getItem('cajaId');
-      const badge = document.getElementById('headerBadge');
       
       if (url && caja) {
-        badge.textContent = 'CAJA ' + caja;
-        badge.classList.add('linked');
+        document.getElementById('caja-label').textContent = 'CAJA ' + caja;
+        document.getElementById('view-setup').classList.add('hidden');
+        document.getElementById('view-scanner').classList.remove('hidden');
       } else {
-        badge.textContent = 'NO VINCULADO';
-        badge.classList.remove('linked');
+        document.getElementById('view-setup').classList.remove('hidden');
+        document.getElementById('view-scanner').classList.add('hidden');
       }
     }
 
-    function showOverlay(icon, text, bgColor, duration = 1500) {
-      const overlay = document.getElementById('overlay');
-      document.getElementById('overlay-icon').textContent = icon;
-      document.getElementById('overlay-text').textContent = text;
-      overlay.style.background = bgColor;
-      overlay.classList.add('visible');
-      
-      setTimeout(() => {
-        overlay.classList.remove('visible');
-        isProcessing = false;
-      }, duration);
+    function unlinkCaja() {
+      localStorage.removeItem('apiUrl');
+      localStorage.removeItem('cajaId');
+      showNotif('Caja desvinculada', 'success', 'link_off');
+      initApp();
     }
 
-    // ── INICIALIZACIÓN DE LA CÁMARA ──
-    window.addEventListener('load', () => {
-      checkStatus();
+    function showNotif(text, type, icon) {
+      const notif = document.getElementById('notification');
+      document.getElementById('notif-text').textContent = text;
+      document.getElementById('notif-icon').textContent = icon;
+      notif.className = 'visible ' + type;
+      setTimeout(() => notif.className = '', 3000);
+    }
+
+    // ── CONTROL DE CÁMARA ──
+    function startCamera(mode) {
+      currentMode = mode;
+      document.getElementById('camera-modal').classList.remove('hidden');
       
+      // Ajustar la guía visual y el título según lo que busquemos
+      const guide = document.getElementById('scan-guide');
+      const title = document.getElementById('camera-title');
+      if (mode === 'qr') {
+        guide.className = 'scan-guide guide-qr';
+        title.textContent = 'Apunta al QR de la pantalla';
+      } else {
+        guide.className = 'scan-guide guide-barcode';
+        title.textContent = 'Apunta al código de barras del libro';
+      }
+
+      // Iniciar cámara trasera
       navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment" } })
         .then(stream => {
-          videoElement.srcObject = stream;
-          videoElement.setAttribute("playsinline", true);
-          videoElement.play();
-          
-          // El escáner lee de forma continua
-          codeReader.decodeFromVideoElement(videoElement, (result, err) => {
-            if (result && !isProcessing) {
-              handleScan(result.getText());
-            }
+          const videoEl = document.getElementById('video');
+          videoEl.srcObject = stream;
+          videoEl.play();
+
+          // Iniciar lectura de frames
+          codeReader.decodeFromVideoElement(videoEl, (result, err) => {
+            if (result) processResult(result.getText());
           });
         })
         .catch(err => {
-          showOverlay('no_photography', 'Permiso de cámara denegado', 'rgba(200, 0, 0, 0.9)', 5000);
+          stopCamera();
+          showNotif('Permiso de cámara denegado', 'error', 'no_photography');
         });
-    });
+    }
 
-    // ── LÓGICA DE ESCANEO "TODO EN UNO" ──
-    async function handleScan(text) {
-      isProcessing = true;
-      if (navigator.vibrate) navigator.vibrate(50);
+    function stopCamera() {
+      codeReader.reset(); // Detiene la decodificación y apaga la cámara
+      document.getElementById('camera-modal').classList.add('hidden');
+    }
 
-      // 1. ¿Es un Código QR de Configuración? (Empieza por '{' y tiene nuestras claves)
-      if (text.startsWith('{') && text.includes('"url"') && text.includes('"caja"')) {
-        try {
-          const config = JSON.parse(text);
-          if (config.url && config.caja) {
-            localStorage.setItem('apiUrl', config.url);
-            localStorage.setItem('cajaId', config.caja);
-            checkStatus();
-            showOverlay('check_circle', 'Caja ' + config.caja + ' Vinculada Correctamente', 'rgba(0, 150, 0, 0.9)', 2000);
-            return; // Termina aquí
-          }
-        } catch(e) { /* Fallo al parsear JSON, ignoramos */ }
-      }
-
-      // 2. ¿Es un Código de Barras de un libro? (Normalmente 13 dígitos)
-      if (text.length >= 10 && !text.startsWith('{')) {
-        const apiUrl = localStorage.getItem('apiUrl');
-        const cajaId = localStorage.getItem('cajaId');
-
-        // Si intenta escanear un libro sin haber configurado la caja primero...
-        if (!apiUrl || !cajaId) {
-          showOverlay('phonelink_setup', 'Apunta primero al QR de la pantalla del ordenador', 'rgba(200, 100, 0, 0.9)', 3000);
-          return;
+    // ── PROCESAMIENTO DE CÓDIGOS ──
+    function processResult(text) {
+      if (currentMode === 'qr') {
+        // Buscamos el JSON de configuración
+        if (text.includes('"url"') && text.includes('"caja"')) {
+          try {
+            const config = JSON.parse(text);
+            if (config.url && config.caja) {
+              stopCamera();
+              if (navigator.vibrate) navigator.vibrate(100);
+              localStorage.setItem('apiUrl', config.url);
+              localStorage.setItem('cajaId', config.caja);
+              showNotif('¡Caja ' + config.caja + ' vinculada!', 'success', 'check_circle');
+              initApp();
+            }
+          } catch(e) {}
         }
-
-        // Si está configurado, enviamos el código a Google Apps Script
-        enviarCodigoLibro(apiUrl, cajaId, text);
-      } else {
-        // Si lee basura, ignorar rápido
-        isProcessing = false;
+      } 
+      else if (currentMode === 'barcode') {
+        // Buscamos código de barras de libro (Ignoramos códigos muy cortos)
+        if (text.length >= 10 && !text.includes('"url"')) {
+          stopCamera();
+          if (navigator.vibrate) navigator.vibrate(100);
+          sendToGoogle(text);
+        }
       }
     }
 
-    // ── COMUNICACIÓN FETCH (POST) CON GOOGLE SCRIPT ──
-    async function enviarCodigoLibro(url, caja, codigo) {
-      showOverlay('wifi_tethering', 'Enviando...', 'rgba(0, 0, 150, 0.8)', 10000); // Overlay permanente hasta que responda
+    // ── ENVÍO DE DATOS A GOOGLE SCRIPT (POST) ──
+    async function sendToGoogle(codigoLibro) {
+      const url = localStorage.getItem('apiUrl');
+      const caja = localStorage.getItem('cajaId');
+      
+      showNotif('Enviando libro...', '', 'wifi_tethering');
 
       try {
         const response = await fetch(url, {
           method: 'POST',
-          // Usamos text/plain para evitar el bloqueo CORS (Preflight OPTIONS) del navegador
           headers: { 'Content-Type': 'text/plain;charset=utf-8' }, 
-          body: JSON.stringify({ action: 'setScannerCode', caja: caja, codigo: codigo })
+          body: JSON.stringify({ action: 'setScannerCode', caja: caja, codigo: codigoLibro })
         });
         
         const result = await response.json();
         
         if (result.ok) {
-           showOverlay('check_circle', '¡Libro enviado!', 'rgba(0, 150, 0, 0.9)');
+           showNotif('¡Libro enviado! (' + codigoLibro + ')', 'success', 'check_circle');
         } else {
-           showOverlay('error', 'Error: ' + result.error, 'rgba(200, 0, 0, 0.9)', 2000);
+           showNotif('Error: ' + result.error, 'error', 'warning');
         }
       } catch (err) {
-         showOverlay('cloud_off', 'Fallo de conexión', 'rgba(200, 0, 0, 0.9)', 2000);
+         showNotif('Fallo de conexión', 'error', 'cloud_off');
       }
     }
+
+    // Arrancar la app
+    window.addEventListener('load', initApp);
   </script>
 </body>
 </html>
