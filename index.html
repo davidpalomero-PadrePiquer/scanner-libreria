@@ -3,375 +3,165 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-  <title>Escáner Móvil</title>
+  <title>Librería Escáner</title>
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200" />
-  <!-- ZXing solo como fallback -->
-  <script type="text/javascript" src="https://unpkg.com/@zxing/library@0.21.3"></script>
+  
+  <script type="text/javascript" src="https://unpkg.com/@zxing/library@latest"></script>
+  
   <style>
     * { box-sizing: border-box; margin: 0; padding: 0; }
     body { font-family: 'Segoe UI', sans-serif; background: #121212; color: white; height: 100vh; display: flex; flex-direction: column; overflow: hidden; }
-    .header { background: #1a237e; padding: 14px 16px; text-align: center; font-weight: bold; font-size: 1.1rem; display: flex; align-items: center; justify-content: center; gap: 8px; }
-    .badge { background: #ff6f00; padding: 4px 12px; border-radius: 20px; font-size: 0.85rem; }
 
-    #setup { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 24px; gap: 20px; }
-    #setup h2 { font-size: 1.3rem; }
-    #setup .field { width: 100%; max-width: 400px; }
-    #setup label { display: block; font-size: 0.85rem; color: #aaa; margin-bottom: 6px; }
-    #setup input { width: 100%; padding: 12px; border: 2px solid #333; border-radius: 8px; background: #1e1e1e; color: white; font-size: 1rem; }
-    #setup input:focus { border-color: #ff6f00; outline: none; }
-    #setup .hint { font-size: 0.8rem; color: #888; margin-top: 4px; }
-    .btn-start { background: #2e7d32; color: white; border: none; padding: 14px 32px; border-radius: 10px; font-size: 1.1rem; font-weight: bold; cursor: pointer; display: flex; align-items: center; gap: 8px; }
+    .header { background: #1a237e; padding: 14px 16px; text-align: center; font-weight: bold; font-size: 1.1rem; display: flex; align-items: center; justify-content: center; gap: 8px; z-index: 20;}
+    .badge { padding: 4px 12px; border-radius: 20px; font-size: 0.85rem; background: #c62828; color: white; transition: background 0.3s;}
+    .badge.linked { background: #2e7d32; }
 
-    #scanner { display: none; flex: 1; flex-direction: column; }
-    #reader-container { flex: 1; position: relative; background: #000; display: flex; justify-content: center; align-items: center; overflow: hidden; }
-    #camera-stream { width: 100%; height: 100%; object-fit: cover; }
-    canvas { display: none; }
+    #reader-container { flex: 1; display: flex; flex-direction: column; justify-content: center; align-items: center; position: relative; background: #000;}
+    #camera-stream { width: 100%; height: 100%; object-fit: cover; position: absolute; top:0; left:0;}
+    
+    .scan-guide { position: absolute; width: 85%; max-width: 400px; height: 150px; border: 2px dashed rgba(255, 255, 255, 0.5); border-radius: 12px; pointer-events: none; display: flex; align-items: center; justify-content: center;}
+    .scan-guide::after { content: ''; width: 100%; height: 2px; background: rgba(255, 0, 0, 0.6); box-shadow: 0 0 10px red; }
 
-    #btnScan {
-      position: absolute; bottom: 20px; left: 50%; transform: translateX(-50%);
-      padding: 18px 50px; font-size: 22px; font-weight: bold;
-      color: white; background: #2e7d32; border: none; border-radius: 14px;
-      cursor: pointer; z-index: 5; opacity: 0.85;
-      display: flex; align-items: center; gap: 10px;
-    }
-    #btnScan:active { background: #1b5e20; opacity: 1; }
-    #btnScan:disabled { background: #555; opacity: 0.5; }
-
-    .status-bar { padding: 14px; text-align: center; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 8px; }
-    .status-row { display: flex; align-items: center; gap: 8px; font-weight: 600; font-size: 1rem; }
-    .status-row.success { color: #4caf50; }
-    .status-row.sending { color: #ffeb3b; }
-    .status-row.error { color: #f44336; }
-    .status-row.ready { color: #b0bec5; }
-    .last-code { font-size: 0.85rem; color: #888; }
-    .btn-change { background: rgba(255,255,255,0.15); color: #ccc; border: none; padding: 6px 14px; border-radius: 6px; font-size: 0.8rem; cursor: pointer; }
-
-    /* Debug log - se puede ocultar en producción */
-    #debugLog { font-family: monospace; font-size: 11px; color: #666; max-height: 80px; overflow-y: auto; padding: 4px 10px; text-align: left; width: 100%; }
-    #debugLog div { margin: 1px 0; }
-    .dbg-ok { color: #4caf50; }
-    .dbg-err { color: #f44; }
-    .dbg-info { color: #888; }
+    /* Overlay para feedback visual (Aciertos y Errores) */
+    #overlay { position: absolute; top: 0; left: 0; width: 100%; height: 100%; z-index: 10; display: flex; flex-direction: column; align-items: center; justify-content: center; background: rgba(0,0,0,0.8); opacity: 0; pointer-events: none; transition: opacity 0.2s; }
+    #overlay.visible { opacity: 1; pointer-events: auto; }
+    #overlay-icon { font-size: 4rem; margin-bottom: 10px; }
+    #overlay-text { font-size: 1.2rem; font-weight: bold; text-align: center; padding: 0 20px; }
   </style>
 </head>
 <body>
 
-  <!-- ══════════ CONFIGURACIÓN ══════════ -->
-  <div id="setup">
-    <span class="material-symbols-outlined" style="font-size:64px; color:#ff6f00;">qr_code_scanner</span>
-    <h2>Escáner Móvil</h2>
-    <p style="color:#aaa; text-align:center; max-width:350px;">Conecta este teléfono a una caja registradora para escanear códigos de barras de libros.</p>
-    <div class="field">
-      <label>URL del sistema (Apps Script)</label>
-      <input type="url" id="inputUrl" placeholder="https://script.google.com/macros/s/.../exec" />
-      <div class="hint">Pega la URL de tu webapp de Google Apps Script</div>
-    </div>
-    <div class="field">
-      <label>Número de Caja</label>
-      <input type="number" id="inputCaja" value="1" min="1" max="99" />
-    </div>
-    <button class="btn-start" onclick="iniciar()">
-      <span class="material-symbols-outlined">play_arrow</span> Iniciar escáner
-    </button>
-    <div id="setupError" style="color:#f44; font-size:0.9rem; display:none;"></div>
+  <div class="header">
+    <span class="material-symbols-outlined">qr_code_scanner</span> Escáner
+    <span class="badge" id="headerBadge">NO VINCULADO</span>
   </div>
 
-  <!-- ══════════ ESCÁNER ══════════ -->
-  <div id="scanner">
-    <div class="header">
-      <span class="material-symbols-outlined">qr_code_scanner</span> Escáner Móvil
-      <span class="badge" id="badgeCaja">CAJA 1</span>
+  <div id="reader-container">
+    <video id="camera-stream" autoplay playsinline muted></video>
+    <div class="scan-guide"></div>
+    
+    <div id="overlay">
+      <span class="material-symbols-outlined" id="overlay-icon">info</span>
+      <div id="overlay-text">Mensaje</div>
     </div>
-
-    <div id="reader-container">
-      <video id="camera-stream" autoplay playsinline muted></video>
-      <canvas id="scanCanvas"></canvas>
-      <button id="btnScan" onclick="escanear()">
-        <span class="material-symbols-outlined">center_focus_strong</span> ESCANEAR
-      </button>
-    </div>
-
-    <div class="status-bar">
-      <div class="status-row ready" id="statusRow">
-        <span class="material-symbols-outlined" id="statusIcon">center_focus_strong</span>
-        <span id="statusText">Apunta al código y pulsa ESCANEAR</span>
-      </div>
-      <div class="last-code" id="lastCode"></div>
-      <button class="btn-change" onclick="volver()">Cambiar caja / URL</button>
-    </div>
-    <div id="debugLog"></div>
   </div>
 
   <script>
-    var API_URL = '';
-    var CAJA = '1';
-    var stream = null;
-    var nativeDetector = null;
-    var zxingReader = null;
+    let isProcessing = false;
+    const codeReader = new ZXing.BrowserMultiFormatReader();
+    const videoElement = document.getElementById('camera-stream');
 
-    // ── Debug log visible ──
-    function dbg(msg, cls) {
-      var el = document.getElementById('debugLog');
-      var d = document.createElement('div');
-      d.className = cls || 'dbg-info';
-      d.textContent = '[' + new Date().toLocaleTimeString() + '] ' + msg;
-      el.insertBefore(d, el.firstChild);
-      if (el.children.length > 20) el.removeChild(el.lastChild);
-    }
-
-    // ── Persistencia ──
-    function guardarConfig() {
-      try { localStorage.setItem('scanner_url', API_URL); localStorage.setItem('scanner_caja', CAJA); } catch(e) {}
-    }
-    function cargarConfig() {
-      try {
-        var u = localStorage.getItem('scanner_url');
-        var c = localStorage.getItem('scanner_caja');
-        if (u) document.getElementById('inputUrl').value = u;
-        if (c) document.getElementById('inputCaja').value = c;
-      } catch(e) {}
-    }
-
-    function setStatus(text, type, icon) {
-      document.getElementById('statusRow').className = 'status-row ' + (type || 'ready');
-      document.getElementById('statusIcon').textContent = icon || 'center_focus_strong';
-      document.getElementById('statusText').textContent = text;
-    }
-
-    // ══════════════════════════════════════
-    //  INIT: detectar qué motor de escaneo usar
-    // ══════════════════════════════════════
-    function initDecoders() {
-      // 1. Intentar API nativa BarcodeDetector (Chrome, Safari iOS 15.4+)
-      if ('BarcodeDetector' in window) {
-        try {
-          nativeDetector = new BarcodeDetector({
-            formats: ['ean_13', 'ean_8', 'qr_code', 'code_128', 'upc_a', 'upc_e']
-          });
-          dbg('BarcodeDetector nativo: OK', 'dbg-ok');
-        } catch (e) {
-          dbg('BarcodeDetector nativo: fallo: ' + e.message, 'dbg-err');
-          nativeDetector = null;
-        }
+    // ── GESTIÓN DE LA INTERFAZ Y EL OVERLAY ──
+    function checkStatus() {
+      const url = localStorage.getItem('apiUrl');
+      const caja = localStorage.getItem('cajaId');
+      const badge = document.getElementById('headerBadge');
+      
+      if (url && caja) {
+        badge.textContent = 'CAJA ' + caja;
+        badge.classList.add('linked');
       } else {
-        dbg('BarcodeDetector nativo: no disponible', 'dbg-info');
-      }
-
-      // 2. ZXing como fallback
-      try {
-        var hints = new Map();
-        hints.set(ZXing.DecodeHintType.POSSIBLE_FORMATS, [
-          ZXing.BarcodeFormat.EAN_13,
-          ZXing.BarcodeFormat.EAN_8,
-          ZXing.BarcodeFormat.QR_CODE,
-          ZXing.BarcodeFormat.CODE_128,
-          ZXing.BarcodeFormat.UPC_A,
-          ZXing.BarcodeFormat.UPC_E
-        ]);
-        hints.set(ZXing.DecodeHintType.TRY_HARDER, true);
-        zxingReader = new ZXing.BrowserMultiFormatReader(hints);
-        dbg('ZXing fallback: OK', 'dbg-ok');
-      } catch (e) {
-        dbg('ZXing fallback: fallo: ' + e.message, 'dbg-err');
+        badge.textContent = 'NO VINCULADO';
+        badge.classList.remove('linked');
       }
     }
 
-    // ══════════════════════════════════════
-    //  DECODIFICAR un canvas con múltiples estrategias
-    // ══════════════════════════════════════
-    async function decodificarCanvas(canvas) {
-
-      // Estrategia 1: BarcodeDetector nativo
-      if (nativeDetector) {
-        dbg('Intentando BarcodeDetector nativo...');
-        try {
-          var barcodes = await nativeDetector.detect(canvas);
-          if (barcodes.length > 0) {
-            dbg('Nativo encontró: ' + barcodes[0].rawValue + ' (' + barcodes[0].format + ')', 'dbg-ok');
-            return barcodes[0].rawValue;
-          }
-          dbg('Nativo: ningún código detectado', 'dbg-info');
-        } catch (e) {
-          dbg('Nativo error: ' + e.message, 'dbg-err');
-        }
-      }
-
-      // Estrategia 2: ZXing desde ImageData (bajo nivel, sin depender de métodos del browser)
-      if (zxingReader) {
-        dbg('Intentando ZXing bajo nivel...');
-        try {
-          var ctx = canvas.getContext('2d');
-          var imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
-          var len = imageData.data.length;
-          var luminances = new Uint8ClampedArray(len / 4);
-          for (var i = 0; i < len; i += 4) {
-            // Convertir RGB a luminancia (escala de grises)
-            luminances[i / 4] = Math.round(imageData.data[i] * 0.299 + imageData.data[i+1] * 0.587 + imageData.data[i+2] * 0.114);
-          }
-          var source = new ZXing.RGBLuminanceSource(luminances, canvas.width, canvas.height);
-          var binarizer = new ZXing.HybridBinarizer(source);
-          var bitmap = new ZXing.BinaryBitmap(binarizer);
-          var hints = new Map();
-          hints.set(ZXing.DecodeHintType.POSSIBLE_FORMATS, [
-            ZXing.BarcodeFormat.EAN_13,
-            ZXing.BarcodeFormat.EAN_8,
-            ZXing.BarcodeFormat.QR_CODE,
-            ZXing.BarcodeFormat.CODE_128,
-            ZXing.BarcodeFormat.UPC_A,
-            ZXing.BarcodeFormat.UPC_E
-          ]);
-          hints.set(ZXing.DecodeHintType.TRY_HARDER, true);
-          var reader = new ZXing.MultiFormatReader();
-          reader.setHints(hints);
-          var result = reader.decode(bitmap);
-          dbg('ZXing encontró: ' + result.getText(), 'dbg-ok');
-          return result.getText();
-        } catch (e) {
-          var msg = e.message || e.toString() || 'sin detalle';
-          if (msg.toLowerCase().includes('not found') || msg.toLowerCase().includes('notfound')) {
-            dbg('ZXing: ningún código detectado', 'dbg-info');
-          } else {
-            dbg('ZXing error: ' + msg, 'dbg-err');
-          }
-        }
-      }
-
-      return null;
+    function showOverlay(icon, text, bgColor, duration = 1500) {
+      const overlay = document.getElementById('overlay');
+      document.getElementById('overlay-icon').textContent = icon;
+      document.getElementById('overlay-text').textContent = text;
+      overlay.style.background = bgColor;
+      overlay.classList.add('visible');
+      
+      setTimeout(() => {
+        overlay.classList.remove('visible');
+        isProcessing = false;
+      }, duration);
     }
 
-    // ══════════════════════════════════════
-    //  CÁMARA
-    // ══════════════════════════════════════
-    function iniciar() {
-      var url = document.getElementById('inputUrl').value.trim();
-      var caja = document.getElementById('inputCaja').value.trim();
-      var errEl = document.getElementById('setupError');
-      if (!url || !url.includes('script.google.com')) {
-        errEl.textContent = 'Introduce una URL válida de Google Apps Script';
-        errEl.style.display = 'block'; return;
-      }
-      errEl.style.display = 'none';
-      API_URL = url;
-      CAJA = caja || '1';
-      guardarConfig();
-      document.getElementById('badgeCaja').textContent = 'CAJA ' + CAJA;
-      document.getElementById('setup').style.display = 'none';
-      document.getElementById('scanner').style.display = 'flex';
-      initDecoders();
-      abrirCamara();
-    }
-
-    function volver() {
-      cerrarCamara();
-      document.getElementById('scanner').style.display = 'none';
-      document.getElementById('setup').style.display = 'flex';
-    }
-
-    function abrirCamara() {
-      var videoEl = document.getElementById('camera-stream');
-      dbg('Abriendo cámara...');
-
-      navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } })
-        .then(function(mediaStream) {
-          stream = mediaStream;
-          videoEl.srcObject = mediaStream;
-          videoEl.setAttribute('playsinline', 'true');
-          videoEl.play();
-          var tracks = mediaStream.getVideoTracks();
-          if (tracks.length > 0) {
-            var s = tracks[0].getSettings();
-            dbg('Cámara OK: ' + s.width + 'x' + s.height, 'dbg-ok');
-          }
-          setStatus('Apunta al código y pulsa ESCANEAR', 'ready', 'center_focus_strong');
-          document.getElementById('btnScan').disabled = false;
+    // ── INICIALIZACIÓN DE LA CÁMARA ──
+    window.addEventListener('load', () => {
+      checkStatus();
+      
+      navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment" } })
+        .then(stream => {
+          videoElement.srcObject = stream;
+          videoElement.setAttribute("playsinline", true);
+          videoElement.play();
+          
+          // El escáner lee de forma continua
+          codeReader.decodeFromVideoElement(videoElement, (result, err) => {
+            if (result && !isProcessing) {
+              handleScan(result.getText());
+            }
+          });
         })
-        .catch(function(err) {
-          dbg('Cámara error: ' + err.name + ': ' + err.message, 'dbg-err');
-          setStatus('Error de cámara: ' + err.message, 'error', 'no_photography');
-          document.getElementById('btnScan').disabled = true;
+        .catch(err => {
+          showOverlay('no_photography', 'Permiso de cámara denegado', 'rgba(200, 0, 0, 0.9)', 5000);
         });
-    }
+    });
 
-    function cerrarCamara() {
-      if (stream) { stream.getTracks().forEach(function(t) { t.stop(); }); stream = null; }
-    }
-
-    // ══════════════════════════════════════
-    //  ESCANEAR: botón manual
-    // ══════════════════════════════════════
-    async function escanear() {
-      var videoEl = document.getElementById('camera-stream');
-      var canvas = document.getElementById('scanCanvas');
-      var btn = document.getElementById('btnScan');
-
-      if (!videoEl.videoWidth || videoEl.readyState < videoEl.HAVE_ENOUGH_DATA) {
-        setStatus('Cámara no lista — espera un momento', 'error', 'warning');
-        dbg('Video no listo: w=' + videoEl.videoWidth + ' state=' + videoEl.readyState, 'dbg-err');
-        return;
-      }
-
-      btn.disabled = true;
-      setStatus('Analizando...', 'sending', 'search');
+    // ── LÓGICA DE ESCANEO "TODO EN UNO" ──
+    async function handleScan(text) {
+      isProcessing = true;
       if (navigator.vibrate) navigator.vibrate(50);
 
-      // Capturar frame
-      canvas.width = videoEl.videoWidth;
-      canvas.height = videoEl.videoHeight;
-      var ctx = canvas.getContext('2d');
-      ctx.drawImage(videoEl, 0, 0, canvas.width, canvas.height);
-      dbg('Frame capturado: ' + canvas.width + 'x' + canvas.height);
+      // 1. ¿Es un Código QR de Configuración? (Empieza por '{' y tiene nuestras claves)
+      if (text.startsWith('{') && text.includes('"url"') && text.includes('"caja"')) {
+        try {
+          const config = JSON.parse(text);
+          if (config.url && config.caja) {
+            localStorage.setItem('apiUrl', config.url);
+            localStorage.setItem('cajaId', config.caja);
+            checkStatus();
+            showOverlay('check_circle', 'Caja ' + config.caja + ' Vinculada Correctamente', 'rgba(0, 150, 0, 0.9)', 2000);
+            return; // Termina aquí
+          }
+        } catch(e) { /* Fallo al parsear JSON, ignoramos */ }
+      }
 
-      // Decodificar (con timeout de seguridad)
-      var timeout = new Promise(function(_, reject) {
-        setTimeout(function() { reject(new Error('Timeout 5s')); }, 5000);
-      });
+      // 2. ¿Es un Código de Barras de un libro? (Normalmente 13 dígitos)
+      if (text.length >= 10 && !text.startsWith('{')) {
+        const apiUrl = localStorage.getItem('apiUrl');
+        const cajaId = localStorage.getItem('cajaId');
 
-      try {
-        var code = await Promise.race([decodificarCanvas(canvas), timeout]);
-
-        if (code && code.length >= 8) {
-          enviarALaCaja(code);
-        } else {
-          noDetectado();
+        // Si intenta escanear un libro sin haber configurado la caja primero...
+        if (!apiUrl || !cajaId) {
+          showOverlay('phonelink_setup', 'Apunta primero al QR de la pantalla del ordenador', 'rgba(200, 100, 0, 0.9)', 3000);
+          return;
         }
-      } catch (e) {
-        dbg('Escaneo error/timeout: ' + e.message, 'dbg-err');
-        noDetectado();
+
+        // Si está configurado, enviamos el código a Google Apps Script
+        enviarCodigoLibro(apiUrl, cajaId, text);
+      } else {
+        // Si lee basura, ignorar rápido
+        isProcessing = false;
       }
     }
 
-    function noDetectado() {
-      setStatus('No se detectó código — reintenta', 'error', 'warning');
-      setTimeout(function() {
-        setStatus('Apunta al código y pulsa ESCANEAR', 'ready', 'center_focus_strong');
-        document.getElementById('btnScan').disabled = false;
-      }, 1500);
-    }
-
-    async function enviarALaCaja(code) {
-      if (navigator.vibrate) navigator.vibrate(100);
-      setStatus('Enviando ' + code + '...', 'sending', 'wifi_tethering');
+    // ── COMUNICACIÓN FETCH (POST) CON GOOGLE SCRIPT ──
+    async function enviarCodigoLibro(url, caja, codigo) {
+      showOverlay('wifi_tethering', 'Enviando...', 'rgba(0, 0, 150, 0.8)', 10000); // Overlay permanente hasta que responda
 
       try {
-        var sep = API_URL.includes('?') ? '&' : '?';
-        var url = API_URL + sep + 'page=api&action=setScannerCode&caja=' + encodeURIComponent(CAJA) + '&codigo=' + encodeURIComponent(code);
-        await fetch(url, { mode: 'no-cors' });
-        setStatus('Enviado ✓  ' + code, 'success', 'check_circle');
-        document.getElementById('lastCode').textContent = 'Último: ' + code;
-        dbg('Enviado OK: ' + code, 'dbg-ok');
-      } catch (e) {
-        setStatus('Error de red', 'error', 'error_outline');
-        dbg('Envío error: ' + e.message, 'dbg-err');
+        const response = await fetch(url, {
+          method: 'POST',
+          // Usamos text/plain para evitar el bloqueo CORS (Preflight OPTIONS) del navegador
+          headers: { 'Content-Type': 'text/plain;charset=utf-8' }, 
+          body: JSON.stringify({ action: 'setScannerCode', caja: caja, codigo: codigo })
+        });
+        
+        const result = await response.json();
+        
+        if (result.ok) {
+           showOverlay('check_circle', '¡Libro enviado!', 'rgba(0, 150, 0, 0.9)');
+        } else {
+           showOverlay('error', 'Error: ' + result.error, 'rgba(200, 0, 0, 0.9)', 2000);
+        }
+      } catch (err) {
+         showOverlay('cloud_off', 'Fallo de conexión', 'rgba(200, 0, 0, 0.9)', 2000);
       }
-
-      setTimeout(function() {
-        setStatus('Apunta al código y pulsa ESCANEAR', 'ready', 'center_focus_strong');
-        document.getElementById('btnScan').disabled = false;
-      }, 1500);
     }
-
-    cargarConfig();
-    window.addEventListener('beforeunload', cerrarCamara);
   </script>
 </body>
 </html>
