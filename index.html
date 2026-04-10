@@ -22,7 +22,7 @@
     .btn-main:active { transform: scale(0.98); }
     .btn-secondary { background: transparent; color: #ffab91; border: 2px solid #ffab91; padding: 12px 20px; border-radius: 8px; font-size: 1rem; font-weight: bold; cursor: pointer; display: flex; align-items: center; gap: 8px; }
 
-    /* Modal de Cámara */
+    /* Modal de Cámara (3 bloques para evitar bug de Safari) */
     #camera-modal { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: #000; z-index: 50; display: flex; flex-direction: column; }
     .camera-header { background: #111; padding: 15px 20px; padding-top: calc(15px + env(safe-area-inset-top)); display: flex; justify-content: space-between; align-items: center; z-index: 10;}
     #camera-title { font-weight: bold; font-size: 1.1rem; color: #fff;}
@@ -30,6 +30,7 @@
 
     #video-container { flex: 1; position: relative; display: flex; justify-content: center; align-items: center; overflow: hidden; background: #000;}
     video { width: 100%; height: 100%; object-fit: cover; position: absolute; top:0; left:0;}
+    canvas { display: none; }
     
     .scan-guide { position: absolute; border: 3px solid rgba(0, 255, 0, 0.7); box-shadow: 0 0 0 4000px rgba(0,0,0,0.7); pointer-events: none; transition: all 0.3s; z-index: 2;}
     .guide-qr { width: 250px; height: 250px; border-radius: 16px; }
@@ -90,12 +91,13 @@
     </div>
     
     <div id="video-container">
-      <video id="camera-stream" autoplay playsinline muted></video>
+      <video id="video" autoplay playsinline muted></video>
+      <canvas id="scanCanvas"></canvas>
       <div id="scan-guide" class="scan-guide"></div>
     </div>
 
     <div class="camera-footer">
-      <button id="btn-capture" onclick="scanAndVerify()">
+      <button id="btn-capture" onclick="capturarFrame()">
         <span class="material-symbols-outlined">center_focus_strong</span> ESCANEAR
       </button>
     </div>
@@ -104,9 +106,22 @@
   <script>
     let currentMode = ''; 
     let stream = null;
-    let zxingReader = new ZXing.BrowserMultiFormatReader(); // Solo se usará como backup
+    let nativeDetector = null;
 
-    window.addEventListener('load', comprobarEstado);
+    window.addEventListener('load', () => {
+      initDecoders();
+      comprobarEstado();
+    });
+
+    function initDecoders() {
+      if ('BarcodeDetector' in window) {
+        try { 
+          nativeDetector = new BarcodeDetector({ 
+            formats: ['ean_13', 'ean_8', 'qr_code', 'code_128', 'upc_a', 'upc_e'] 
+          }); 
+        } catch(e) {}
+      }
+    }
 
     function comprobarEstado() {
       const url = localStorage.getItem('apiUrl');
@@ -136,13 +151,11 @@
       setTimeout(() => notif.className = '', 3000);
     }
 
-    async function abrirCamara(mode) {
+    function abrirCamara(mode) {
       currentMode = mode;
       document.getElementById('camera-modal').classList.remove('hidden');
-      
-      const btn = document.getElementById('btn-capture');
-      btn.disabled = false;
-      btn.innerHTML = '<span class="material-symbols-outlined">center_focus_strong</span> ESCANEAR';
+      document.getElementById('btn-capture').disabled = false;
+      document.getElementById('btn-capture').innerHTML = '<span class="material-symbols-outlined">center_focus_strong</span> ESCANEAR';
       
       const guide = document.getElementById('scan-guide');
       const title = document.getElementById('camera-title');
@@ -155,16 +168,17 @@
         title.textContent = 'Apunta al código del libro';
       }
 
-      try {
-        stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment" } });
-        const videoElement = document.getElementById('camera-stream');
-        videoElement.srcObject = stream;
-        videoElement.setAttribute('playsinline', true);
-        videoElement.play();
-      } catch (err) {
-        cerrarCamara();
-        showNotif('Permiso de cámara denegado', 'error', 'no_photography');
-      }
+      navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment" } })
+        .then(mediaStream => {
+          stream = mediaStream;
+          const videoEl = document.getElementById('video');
+          videoEl.srcObject = mediaStream;
+          videoEl.play();
+        })
+        .catch(err => {
+          cerrarCamara();
+          showNotif('Permiso de cámara denegado', 'error', 'no_photography');
+        });
     }
 
     function cerrarCamara() {
@@ -175,81 +189,84 @@
       document.getElementById('camera-modal').classList.add('hidden');
     }
 
-    // ── LA FUNCIÓN QUE COPIAMOS DE TU INDEX 15.9 ──
-    async function scanAndVerify() {
-      const videoElement = document.getElementById('camera-stream');
+    async function capturarFrame() {
+      const videoEl = document.getElementById('video');
+      const canvas = document.getElementById('scanCanvas');
       const btn = document.getElementById('btn-capture');
 
-      if (!videoElement.videoWidth) return;
+      if (!videoEl.videoWidth || videoEl.readyState < videoEl.HAVE_ENOUGH_DATA) return;
 
       if (navigator.vibrate) navigator.vibrate(50);
       btn.disabled = true;
       btn.innerHTML = '<span class="material-symbols-outlined">hourglass_empty</span> ANALIZANDO...';
 
-      // 1. Creamos el canvas y tomamos la foto
-      const canvas = document.createElement('canvas');
-      canvas.width = videoElement.videoWidth;
-      canvas.height = videoElement.videoHeight;
-      const context = canvas.getContext('2d');
-      context.drawImage(videoElement, 0, 0, canvas.width, canvas.height);
+      canvas.width = videoEl.videoWidth;
+      canvas.height = videoEl.videoHeight;
+      const ctx = canvas.getContext('2d', { willReadFrequently: true });
+      ctx.drawImage(videoEl, 0, 0);
 
-      let codigoEncontrado = null;
-
-      // 2. Si buscamos un QR, usamos tu amado jsQR
-      if (currentMode === 'qr') {
-        const imageData = context.getImageData(0, 0, canvas.width, canvas.height);
-        const code = jsQR(imageData.data, imageData.width, imageData.height);
-        if (code) {
-          codigoEncontrado = code.data;
-        }
-      } 
-      // 3. Si buscamos un libro, usamos la API nativa o ZXing (seguro anti-cuelgues)
-      else if (currentMode === 'barcode') {
-        codigoEncontrado = await decodificarCodigoDeBarras(canvas);
-      }
-
-      // 4. Analizamos el resultado
-      if (codigoEncontrado) {
-        procesarResultado(codigoEncontrado);
-      } else {
-        showNotif('No se detectó código. Reintenta.', 'error', 'warning');
-        setTimeout(() => {
-          btn.disabled = false;
-          btn.innerHTML = '<span class="material-symbols-outlined">center_focus_strong</span> ESCANEAR';
-        }, 1500);
+      try {
+        const codigo = await decodificarCanvas(canvas);
+        if (codigo) procesarResultado(codigo);
+        else falloDeteccion(btn);
+      } catch (e) {
+        falloDeteccion(btn);
       }
     }
 
-    // Función de respaldo para leer códigos de barras sin que ZXing se cuelgue
-    async function decodificarCodigoDeBarras(canvas) {
-      // Intento 1: API Nativa (Rapidísima en iOS 17+ y Chrome Android)
-      if ('BarcodeDetector' in window) {
+    function falloDeteccion(btn) {
+      showNotif('No se detectó código. Reintenta.', 'error', 'warning');
+      setTimeout(() => {
+        btn.disabled = false;
+        btn.innerHTML = '<span class="material-symbols-outlined">center_focus_strong</span> ESCANEAR';
+      }, 1500);
+    }
+
+    // ── EL MOTOR EXTRAÍDO DE TU CÓDIGO (100% FIEL A TU INDEX) ──
+    async function decodificarCanvas(canvas) {
+      const ctx = canvas.getContext('2d');
+      const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+
+      // 1. Prioridad: Lector Nativo (iOS 17+ / Chrome Android)
+      if (nativeDetector) {
         try {
-          const detector = new BarcodeDetector({ formats: ['ean_13', 'ean_8'] });
-          const barcodes = await detector.detect(canvas);
+          const barcodes = await nativeDetector.detect(canvas);
           if (barcodes.length > 0) return barcodes[0].rawValue;
         } catch(e) {}
       }
 
-      // Intento 2: ZXing (Plan B)
-      try {
-        // Reducimos el tamaño de la foto antes de dársela a ZXing para que NO se cuelgue
-        const scale = 640 / canvas.width;
-        const smallCanvas = document.createElement('canvas');
-        smallCanvas.width = 640;
-        smallCanvas.height = canvas.height * scale;
-        const smallCtx = smallCanvas.getContext('2d');
-        smallCtx.drawImage(canvas, 0, 0, smallCanvas.width, smallCanvas.height);
-
-        const img = new Image();
-        img.src = smallCanvas.toDataURL();
-        await new Promise(r => img.onload = r);
-
-        const result = await zxingReader.decodeFromImageElement(img);
-        return result.getText();
-      } catch(e) {
-        return null;
+      // 2. Si buscamos un QR -> Usamos jsQR
+      if (currentMode === 'qr' && typeof jsQR !== 'undefined') {
+        const qrCode = jsQR(imageData.data, imageData.width, imageData.height, { inversionAttempts: "dontInvert" });
+        if (qrCode) return qrCode.data;
       }
+
+      // 3. Si buscamos código de barras -> Usamos la lógica de Luminancia ZXing que escribiste tú
+      if (currentMode === 'barcode' && typeof ZXing !== 'undefined') {
+        try {
+          const len = imageData.data.length;
+          const lum = new Uint8ClampedArray(len / 4);
+          for (let i = 0; i < len; i += 4) {
+            lum[i / 4] = Math.round(imageData.data[i] * 0.299 + imageData.data[i+1] * 0.587 + imageData.data[i+2] * 0.114);
+          }
+          const source = new ZXing.RGBLuminanceSource(lum, canvas.width, canvas.height);
+          const bitmap = new ZXing.BinaryBitmap(new ZXing.HybridBinarizer(source));
+          
+          const reader = new ZXing.MultiFormatReader();
+          const hints = new Map();
+          hints.set(ZXing.DecodeHintType.POSSIBLE_FORMATS, [
+            ZXing.BarcodeFormat.EAN_13, ZXing.BarcodeFormat.EAN_8,
+            ZXing.BarcodeFormat.CODE_128, ZXing.BarcodeFormat.UPC_A, ZXing.BarcodeFormat.UPC_E
+          ]);
+          hints.set(ZXing.DecodeHintType.TRY_HARDER, true);
+          reader.setHints(hints);
+          
+          const result = reader.decode(bitmap);
+          return result.getText();
+        } catch(e) {}
+      }
+
+      return null;
     }
 
     function procesarResultado(text) {
@@ -265,36 +282,37 @@
               showNotif('¡Caja ' + config.caja + ' vinculada!', 'success', 'check_circle');
               comprobarEstado();
             }
-          } catch(e) { /* Error parseando JSON */ }
+          } catch(e) { falloDeteccion(document.getElementById('btn-capture')); }
+        } else {
+          falloDeteccion(document.getElementById('btn-capture'));
         }
       } 
       else if (currentMode === 'barcode') {
-        cerrarCamara();
-        if (navigator.vibrate) navigator.vibrate(100);
-        enviarALaCaja(text);
+        // Validación básica de código de barras (evitamos leer basura menor de 8 dígitos)
+        if (text.length >= 8 && !text.includes('"url"')) {
+          cerrarCamara();
+          if (navigator.vibrate) navigator.vibrate(100);
+          enviarALaCaja(text);
+        } else {
+          falloDeteccion(document.getElementById('btn-capture'));
+        }
       }
     }
 
+    // ── CONEXIÓN CLONADA DE TU INDEX (`fetch` por método GET + `no-cors`) ──
     async function enviarALaCaja(codigoLibro) {
-      const url = localStorage.getItem('apiUrl');
+      const apiUrl = localStorage.getItem('apiUrl');
       const caja = localStorage.getItem('cajaId');
       
       showNotif('Enviando libro...', 'info', 'wifi_tethering');
 
       try {
-        const response = await fetch(url, {
-          method: 'POST',
-          headers: { 'Content-Type': 'text/plain;charset=utf-8' }, 
-          body: JSON.stringify({ action: 'setScannerCode', caja: caja, codigo: codigoLibro })
-        });
+        const sep = apiUrl.includes('?') ? '&' : '?';
+        const url = apiUrl + sep + 'page=api&action=setScannerCode&caja=' + encodeURIComponent(caja) + '&codigo=' + encodeURIComponent(codigoLibro);
         
-        const result = await response.json();
+        await fetch(url, { mode: 'no-cors' });
         
-        if (result.ok) {
-           showNotif('¡Enviado! (' + codigoLibro + ')', 'success', 'check_circle');
-        } else {
-           showNotif('Error: ' + result.error, 'error', 'warning');
-        }
+        showNotif('¡Enviado! (' + codigoLibro + ')', 'success', 'check_circle');
       } catch (err) {
          showNotif('Fallo de conexión', 'error', 'cloud_off');
       }
