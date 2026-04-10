@@ -9,10 +9,10 @@
   <style>
     * { box-sizing: border-box; margin: 0; padding: 0; }
     body { font-family: 'Segoe UI', sans-serif; background: #121212; color: white; height: 100vh; display: flex; flex-direction: column; overflow: hidden; }
-
     .header { background: #1a237e; padding: 14px 16px; text-align: center; font-weight: bold; font-size: 1.1rem; display: flex; align-items: center; justify-content: center; gap: 8px; }
     .badge { background: #ff6f00; padding: 4px 12px; border-radius: 20px; font-size: 0.85rem; }
 
+    /* ── Setup ── */
     #setup { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 24px; gap: 20px; }
     #setup h2 { font-size: 1.3rem; }
     #setup .field { width: 100%; max-width: 400px; }
@@ -22,33 +22,36 @@
     #setup .hint { font-size: 0.8rem; color: #888; margin-top: 4px; }
     .btn-start { background: #2e7d32; color: white; border: none; padding: 14px 32px; border-radius: 10px; font-size: 1.1rem; font-weight: bold; cursor: pointer; display: flex; align-items: center; gap: 8px; }
 
+    /* ── Scanner ── */
     #scanner { display: none; flex: 1; flex-direction: column; }
     #reader-container { flex: 1; position: relative; background: #000; display: flex; justify-content: center; align-items: center; overflow: hidden; }
     #camera-stream { width: 100%; height: 100%; object-fit: cover; }
-    .scan-guide { position: absolute; width: 75%; max-width: 320px; height: 100px; border: 3px solid rgba(0,255,0,0.5); border-radius: 12px; pointer-events: none; z-index: 2; }
+    canvas { display: none; }
 
-    .status-bar { padding: 16px; text-align: center; min-height: 120px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 10px; }
-    .status-row { display: flex; align-items: center; gap: 8px; font-weight: 600; font-size: 1rem; transition: all 0.3s; }
+    /* Botón ESCANEAR grande sobre el vídeo */
+    #btnScan {
+      position: absolute; bottom: 20px; left: 50%; transform: translateX(-50%);
+      padding: 18px 50px; font-size: 22px; font-weight: bold;
+      color: white; background: #2e7d32; border: none; border-radius: 14px;
+      cursor: pointer; z-index: 5; opacity: 0.85;
+      display: flex; align-items: center; gap: 10px;
+    }
+    #btnScan:active { background: #1b5e20; opacity: 1; }
+    #btnScan:disabled { background: #555; opacity: 0.5; }
+
+    .status-bar { padding: 14px; text-align: center; min-height: 100px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 8px; }
+    .status-row { display: flex; align-items: center; gap: 8px; font-weight: 600; font-size: 1rem; }
     .status-row.success { color: #4caf50; }
     .status-row.sending { color: #ffeb3b; }
     .status-row.error { color: #f44336; }
     .status-row.ready { color: #b0bec5; }
-
-    .last-code { font-size: 0.85rem; color: #888; margin-top: 4px; }
-    .btn-change { background: rgba(255,255,255,0.15); color: #ccc; border: none; padding: 6px 14px; border-radius: 6px; font-size: 0.8rem; cursor: pointer; margin-top: 4px; }
-
-    .flash { animation: flashGreen 0.3s; }
-    @keyframes flashGreen {
-      0% { box-shadow: inset 0 0 0 4px rgba(76,175,80,0.8); }
-      100% { box-shadow: inset 0 0 0 0 rgba(76,175,80,0); }
-    }
+    .last-code { font-size: 0.85rem; color: #888; }
+    .btn-change { background: rgba(255,255,255,0.15); color: #ccc; border: none; padding: 6px 14px; border-radius: 6px; font-size: 0.8rem; cursor: pointer; }
   </style>
 </head>
 <body>
 
-  <!-- ══════════════════════════════════════ -->
-  <!--  PANTALLA 1: CONFIGURACIÓN            -->
-  <!-- ══════════════════════════════════════ -->
+  <!-- ══════════ CONFIGURACIÓN ══════════ -->
   <div id="setup">
     <span class="material-symbols-outlined" style="font-size:64px; color:#ff6f00;">qr_code_scanner</span>
     <h2>Escáner Móvil</h2>
@@ -59,21 +62,17 @@
       <input type="url" id="inputUrl" placeholder="https://script.google.com/macros/s/.../exec" />
       <div class="hint">Pega la URL de tu webapp de Google Apps Script</div>
     </div>
-
     <div class="field">
       <label>Número de Caja</label>
       <input type="number" id="inputCaja" value="1" min="1" max="99" />
     </div>
-
     <button class="btn-start" onclick="iniciar()">
       <span class="material-symbols-outlined">play_arrow</span> Iniciar escáner
     </button>
     <div id="setupError" style="color:#f44; font-size:0.9rem; display:none;"></div>
   </div>
 
-  <!-- ══════════════════════════════════════ -->
-  <!--  PANTALLA 2: ESCÁNER ACTIVO           -->
-  <!-- ══════════════════════════════════════ -->
+  <!-- ══════════ ESCÁNER ══════════ -->
   <div id="scanner">
     <div class="header">
       <span class="material-symbols-outlined">qr_code_scanner</span> Escáner Móvil
@@ -82,13 +81,16 @@
 
     <div id="reader-container">
       <video id="camera-stream" autoplay playsinline muted></video>
-      <div class="scan-guide"></div>
+      <canvas id="scanCanvas"></canvas>
+      <button id="btnScan" onclick="escanear()">
+        <span class="material-symbols-outlined">center_focus_strong</span> ESCANEAR
+      </button>
     </div>
 
     <div class="status-bar">
       <div class="status-row ready" id="statusRow">
         <span class="material-symbols-outlined" id="statusIcon">center_focus_strong</span>
-        <span id="statusText">Iniciando cámara...</span>
+        <span id="statusText">Apunta al código y pulsa ESCANEAR</span>
       </div>
       <div class="last-code" id="lastCode"></div>
       <button class="btn-change" onclick="volver()">Cambiar caja / URL</button>
@@ -98,7 +100,7 @@
   <script>
     var API_URL = '';
     var CAJA = '1';
-    var isProcessing = false;
+    var stream = null;
     var codeReader = null;
 
     // ── Persistencia ──
@@ -119,35 +121,24 @@
       var url = document.getElementById('inputUrl').value.trim();
       var caja = document.getElementById('inputCaja').value.trim();
       var errEl = document.getElementById('setupError');
-
       if (!url || !url.includes('script.google.com')) {
         errEl.textContent = 'Introduce una URL válida de Google Apps Script';
-        errEl.style.display = 'block';
-        return;
+        errEl.style.display = 'block'; return;
       }
       errEl.style.display = 'none';
       API_URL = url;
       CAJA = caja || '1';
       guardarConfig();
-
       document.getElementById('badgeCaja').textContent = 'CAJA ' + CAJA;
       document.getElementById('setup').style.display = 'none';
       document.getElementById('scanner').style.display = 'flex';
-      startScanner();
+      abrirCamara();
     }
 
     function volver() {
-      stopScanner();
+      cerrarCamara();
       document.getElementById('scanner').style.display = 'none';
       document.getElementById('setup').style.display = 'flex';
-    }
-
-    // ── API ──
-    async function enviarCodigo(codigo) {
-      var sep = API_URL.includes('?') ? '&' : '?';
-      var url = API_URL + sep + 'page=api&action=setScannerCode&caja=' + encodeURIComponent(CAJA) + '&codigo=' + encodeURIComponent(codigo);
-      await fetch(url, { mode: 'no-cors' });
-      return { ok: true };
     }
 
     // ── UI ──
@@ -157,42 +148,29 @@
       document.getElementById('statusText').textContent = text;
     }
 
-    function flashEffect() {
-      var c = document.getElementById('reader-container');
-      c.classList.remove('flash');
-      void c.offsetWidth;
-      c.classList.add('flash');
-    }
+    // ══════════════════════════════════════════
+    //  CÁMARA: solo previsualización en vivo
+    //  NO escanea nada hasta pulsar el botón
+    // ══════════════════════════════════════════
+    function abrirCamara() {
+      var videoEl = document.getElementById('camera-stream');
 
-    // ── Enviar código ──
-    async function onScanSuccess(code) {
-      if (isProcessing) return;
-      isProcessing = true;
+      navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } })
+        .then(function(mediaStream) {
+          stream = mediaStream;
+          videoEl.srcObject = mediaStream;
+          videoEl.setAttribute('playsinline', 'true');
+          videoEl.play();
+          setStatus('Apunta al código y pulsa ESCANEAR', 'ready', 'center_focus_strong');
+          document.getElementById('btnScan').disabled = false;
+        })
+        .catch(function(err) {
+          console.error('Camera error:', err);
+          setStatus('Error de cámara: ' + err.message, 'error', 'no_photography');
+          document.getElementById('btnScan').disabled = true;
+        });
 
-      if (navigator.vibrate) navigator.vibrate(100);
-      flashEffect();
-      setStatus('Enviando ' + code + '...', 'sending', 'wifi_tethering');
-
-      try {
-        await enviarCodigo(code);
-        setStatus('Enviado ✓  ' + code, 'success', 'check_circle');
-        document.getElementById('lastCode').textContent = 'Último: ' + code;
-      } catch (e) {
-        setStatus('Error de red', 'error', 'error_outline');
-      }
-
-      setTimeout(function() {
-        setStatus('Apunta al código del libro', 'ready', 'center_focus_strong');
-        isProcessing = false;
-      }, 1500);
-    }
-
-    // ══════════════════════════════════════════════════════
-    //  MOTOR DE CÁMARA — ZXing
-    //  Escaneo CONTINUO en vivo de EAN-13 / ISBN / QR
-    //  Sin botones: apuntas y detecta automáticamente
-    // ══════════════════════════════════════════════════════
-    function startScanner() {
+      // Preparar ZXing para decodificar frames sueltos (no continuo)
       var hints = new Map();
       hints.set(ZXing.DecodeHintType.POSSIBLE_FORMATS, [
         ZXing.BarcodeFormat.EAN_13,
@@ -203,56 +181,86 @@
         ZXing.BarcodeFormat.UPC_E
       ]);
       hints.set(ZXing.DecodeHintType.TRY_HARDER, true);
-
       codeReader = new ZXing.BrowserMultiFormatReader(hints);
+    }
 
-      codeReader.listVideoInputDevices()
-        .then(function(devices) {
-          var cams = devices.filter(function(d) { return d.kind === 'videoinput'; });
+    function cerrarCamara() {
+      if (stream) { stream.getTracks().forEach(function(t) { t.stop(); }); stream = null; }
+      if (codeReader) { codeReader.reset(); codeReader = null; }
+    }
 
-          // Elegir cámara trasera
-          var selectedId = null;
-          for (var i = 0; i < cams.length; i++) {
-            var label = (cams[i].label || '').toLowerCase();
-            if (label.includes('back') || label.includes('rear') || label.includes('trasera') || label.includes('environment')) {
-              selectedId = cams[i].deviceId;
-              break;
-            }
+    // ══════════════════════════════════════════
+    //  ESCANEAR: captura UN frame y lo analiza
+    //  Solo se ejecuta al pulsar el botón
+    // ══════════════════════════════════════════
+    function escanear() {
+      var videoEl = document.getElementById('camera-stream');
+      var canvas = document.getElementById('scanCanvas');
+      var btn = document.getElementById('btnScan');
+
+      if (!videoEl.videoWidth) {
+        setStatus('Cámara no lista — espera un momento', 'error', 'warning');
+        return;
+      }
+
+      btn.disabled = true;
+      setStatus('Analizando...', 'sending', 'search');
+      if (navigator.vibrate) navigator.vibrate(50);
+
+      // Capturar frame actual del vídeo
+      canvas.width = videoEl.videoWidth;
+      canvas.height = videoEl.videoHeight;
+      var ctx = canvas.getContext('2d');
+      ctx.drawImage(videoEl, 0, 0, canvas.width, canvas.height);
+
+      // Decodificar el frame con ZXing
+      codeReader.decodeFromCanvas(canvas)
+        .then(function(result) {
+          var code = result.getText();
+          if (code && code.length >= 8) {
+            enviarALaCaja(code);
+          } else {
+            noDetectado();
           }
-          if (!selectedId && cams.length > 0) {
-            selectedId = cams[cams.length - 1].deviceId;
-          }
-
-          // Escaneo continuo: ZXing analiza cada frame del vídeo automáticamente
-          return codeReader.decodeFromVideoDevice(selectedId, 'camera-stream', function(result, err) {
-            if (result && !isProcessing) {
-              var texto = result.getText();
-              if (texto && texto.length >= 8) {
-                onScanSuccess(texto);
-              }
-            }
-            // Si no hay código en el frame, err es normal — se ignora
-          });
-        })
-        .then(function() {
-          setStatus('Apunta al código del libro', 'ready', 'center_focus_strong');
         })
         .catch(function(err) {
-          console.error('Camera error:', err);
-          setStatus('Error de cámara: ' + err.message, 'error', 'no_photography');
+          noDetectado();
         });
     }
 
-    function stopScanner() {
-      if (codeReader) {
-        codeReader.reset();
-        codeReader = null;
+    function noDetectado() {
+      setStatus('No se detectó código — reintenta', 'error', 'warning');
+      setTimeout(function() {
+        setStatus('Apunta al código y pulsa ESCANEAR', 'ready', 'center_focus_strong');
+        document.getElementById('btnScan').disabled = false;
+      }, 1500);
+    }
+
+    // ── Enviar a la caja ──
+    async function enviarALaCaja(code) {
+      if (navigator.vibrate) navigator.vibrate(100);
+      setStatus('Enviando ' + code + '...', 'sending', 'wifi_tethering');
+
+      try {
+        var sep = API_URL.includes('?') ? '&' : '?';
+        var url = API_URL + sep + 'page=api&action=setScannerCode&caja=' + encodeURIComponent(CAJA) + '&codigo=' + encodeURIComponent(code);
+        await fetch(url, { mode: 'no-cors' });
+
+        setStatus('Enviado ✓  ' + code, 'success', 'check_circle');
+        document.getElementById('lastCode').textContent = 'Último: ' + code;
+      } catch (e) {
+        setStatus('Error de red', 'error', 'error_outline');
       }
+
+      setTimeout(function() {
+        setStatus('Apunta al código y pulsa ESCANEAR', 'ready', 'center_focus_strong');
+        document.getElementById('btnScan').disabled = false;
+      }, 1500);
     }
 
     // ── Arranque ──
     cargarConfig();
-    window.addEventListener('beforeunload', stopScanner);
+    window.addEventListener('beforeunload', cerrarCamara);
   </script>
 </body>
 </html>
