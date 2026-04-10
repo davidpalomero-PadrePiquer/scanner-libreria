@@ -5,6 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
   <title>Escáner Móvil</title>
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200" />
+  <!-- ZXing solo como fallback -->
   <script type="text/javascript" src="https://unpkg.com/@zxing/library@0.21.3"></script>
   <style>
     * { box-sizing: border-box; margin: 0; padding: 0; }
@@ -25,8 +26,6 @@
     #reader-container { flex: 1; position: relative; background: #000; display: flex; justify-content: center; align-items: center; overflow: hidden; }
     #camera-stream { width: 100%; height: 100%; object-fit: cover; }
     canvas { display: none; }
-    /* Imagen oculta para que ZXing la lea */
-    #snapImg { display: none; }
 
     #btnScan {
       position: absolute; bottom: 20px; left: 50%; transform: translateX(-50%);
@@ -38,7 +37,7 @@
     #btnScan:active { background: #1b5e20; opacity: 1; }
     #btnScan:disabled { background: #555; opacity: 0.5; }
 
-    .status-bar { padding: 14px; text-align: center; min-height: 100px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 8px; }
+    .status-bar { padding: 14px; text-align: center; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 8px; }
     .status-row { display: flex; align-items: center; gap: 8px; font-weight: 600; font-size: 1rem; }
     .status-row.success { color: #4caf50; }
     .status-row.sending { color: #ffeb3b; }
@@ -46,6 +45,13 @@
     .status-row.ready { color: #b0bec5; }
     .last-code { font-size: 0.85rem; color: #888; }
     .btn-change { background: rgba(255,255,255,0.15); color: #ccc; border: none; padding: 6px 14px; border-radius: 6px; font-size: 0.8rem; cursor: pointer; }
+
+    /* Debug log - se puede ocultar en producción */
+    #debugLog { font-family: monospace; font-size: 11px; color: #666; max-height: 80px; overflow-y: auto; padding: 4px 10px; text-align: left; width: 100%; }
+    #debugLog div { margin: 1px 0; }
+    .dbg-ok { color: #4caf50; }
+    .dbg-err { color: #f44; }
+    .dbg-info { color: #888; }
   </style>
 </head>
 <body>
@@ -80,7 +86,6 @@
     <div id="reader-container">
       <video id="camera-stream" autoplay playsinline muted></video>
       <canvas id="scanCanvas"></canvas>
-      <img id="snapImg" />
       <button id="btnScan" onclick="escanear()">
         <span class="material-symbols-outlined">center_focus_strong</span> ESCANEAR
       </button>
@@ -94,14 +99,27 @@
       <div class="last-code" id="lastCode"></div>
       <button class="btn-change" onclick="volver()">Cambiar caja / URL</button>
     </div>
+    <div id="debugLog"></div>
   </div>
 
   <script>
     var API_URL = '';
     var CAJA = '1';
     var stream = null;
-    var codeReader = null;
+    var nativeDetector = null;
+    var zxingReader = null;
 
+    // ── Debug log visible ──
+    function dbg(msg, cls) {
+      var el = document.getElementById('debugLog');
+      var d = document.createElement('div');
+      d.className = cls || 'dbg-info';
+      d.textContent = '[' + new Date().toLocaleTimeString() + '] ' + msg;
+      el.insertBefore(d, el.firstChild);
+      if (el.children.length > 20) el.removeChild(el.lastChild);
+    }
+
+    // ── Persistencia ──
     function guardarConfig() {
       try { localStorage.setItem('scanner_url', API_URL); localStorage.setItem('scanner_caja', CAJA); } catch(e) {}
     }
@@ -114,6 +132,116 @@
       } catch(e) {}
     }
 
+    function setStatus(text, type, icon) {
+      document.getElementById('statusRow').className = 'status-row ' + (type || 'ready');
+      document.getElementById('statusIcon').textContent = icon || 'center_focus_strong';
+      document.getElementById('statusText').textContent = text;
+    }
+
+    // ══════════════════════════════════════
+    //  INIT: detectar qué motor de escaneo usar
+    // ══════════════════════════════════════
+    function initDecoders() {
+      // 1. Intentar API nativa BarcodeDetector (Chrome, Safari iOS 15.4+)
+      if ('BarcodeDetector' in window) {
+        try {
+          nativeDetector = new BarcodeDetector({
+            formats: ['ean_13', 'ean_8', 'qr_code', 'code_128', 'upc_a', 'upc_e']
+          });
+          dbg('BarcodeDetector nativo: OK', 'dbg-ok');
+        } catch (e) {
+          dbg('BarcodeDetector nativo: fallo: ' + e.message, 'dbg-err');
+          nativeDetector = null;
+        }
+      } else {
+        dbg('BarcodeDetector nativo: no disponible', 'dbg-info');
+      }
+
+      // 2. ZXing como fallback
+      try {
+        var hints = new Map();
+        hints.set(ZXing.DecodeHintType.POSSIBLE_FORMATS, [
+          ZXing.BarcodeFormat.EAN_13,
+          ZXing.BarcodeFormat.EAN_8,
+          ZXing.BarcodeFormat.QR_CODE,
+          ZXing.BarcodeFormat.CODE_128,
+          ZXing.BarcodeFormat.UPC_A,
+          ZXing.BarcodeFormat.UPC_E
+        ]);
+        hints.set(ZXing.DecodeHintType.TRY_HARDER, true);
+        zxingReader = new ZXing.BrowserMultiFormatReader(hints);
+        dbg('ZXing fallback: OK', 'dbg-ok');
+      } catch (e) {
+        dbg('ZXing fallback: fallo: ' + e.message, 'dbg-err');
+      }
+    }
+
+    // ══════════════════════════════════════
+    //  DECODIFICAR un canvas con múltiples estrategias
+    // ══════════════════════════════════════
+    async function decodificarCanvas(canvas) {
+
+      // Estrategia 1: BarcodeDetector nativo
+      if (nativeDetector) {
+        dbg('Intentando BarcodeDetector nativo...');
+        try {
+          var barcodes = await nativeDetector.detect(canvas);
+          if (barcodes.length > 0) {
+            dbg('Nativo encontró: ' + barcodes[0].rawValue + ' (' + barcodes[0].format + ')', 'dbg-ok');
+            return barcodes[0].rawValue;
+          }
+          dbg('Nativo: ningún código detectado', 'dbg-info');
+        } catch (e) {
+          dbg('Nativo error: ' + e.message, 'dbg-err');
+        }
+      }
+
+      // Estrategia 2: ZXing desde ImageData (bajo nivel, sin depender de métodos del browser)
+      if (zxingReader) {
+        dbg('Intentando ZXing bajo nivel...');
+        try {
+          var ctx = canvas.getContext('2d');
+          var imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+          var len = imageData.data.length;
+          var luminances = new Uint8ClampedArray(len / 4);
+          for (var i = 0; i < len; i += 4) {
+            // Convertir RGB a luminancia (escala de grises)
+            luminances[i / 4] = Math.round(imageData.data[i] * 0.299 + imageData.data[i+1] * 0.587 + imageData.data[i+2] * 0.114);
+          }
+          var source = new ZXing.RGBLuminanceSource(luminances, canvas.width, canvas.height);
+          var binarizer = new ZXing.HybridBinarizer(source);
+          var bitmap = new ZXing.BinaryBitmap(binarizer);
+          var hints = new Map();
+          hints.set(ZXing.DecodeHintType.POSSIBLE_FORMATS, [
+            ZXing.BarcodeFormat.EAN_13,
+            ZXing.BarcodeFormat.EAN_8,
+            ZXing.BarcodeFormat.QR_CODE,
+            ZXing.BarcodeFormat.CODE_128,
+            ZXing.BarcodeFormat.UPC_A,
+            ZXing.BarcodeFormat.UPC_E
+          ]);
+          hints.set(ZXing.DecodeHintType.TRY_HARDER, true);
+          var reader = new ZXing.MultiFormatReader();
+          reader.setHints(hints);
+          var result = reader.decode(bitmap);
+          dbg('ZXing encontró: ' + result.getText(), 'dbg-ok');
+          return result.getText();
+        } catch (e) {
+          var msg = e.message || e.toString() || 'sin detalle';
+          if (msg.toLowerCase().includes('not found') || msg.toLowerCase().includes('notfound')) {
+            dbg('ZXing: ningún código detectado', 'dbg-info');
+          } else {
+            dbg('ZXing error: ' + msg, 'dbg-err');
+          }
+        }
+      }
+
+      return null;
+    }
+
+    // ══════════════════════════════════════
+    //  CÁMARA
+    // ══════════════════════════════════════
     function iniciar() {
       var url = document.getElementById('inputUrl').value.trim();
       var caja = document.getElementById('inputCaja').value.trim();
@@ -129,6 +257,7 @@
       document.getElementById('badgeCaja').textContent = 'CAJA ' + CAJA;
       document.getElementById('setup').style.display = 'none';
       document.getElementById('scanner').style.display = 'flex';
+      initDecoders();
       abrirCamara();
     }
 
@@ -138,17 +267,9 @@
       document.getElementById('setup').style.display = 'flex';
     }
 
-    function setStatus(text, type, icon) {
-      document.getElementById('statusRow').className = 'status-row ' + (type || 'ready');
-      document.getElementById('statusIcon').textContent = icon || 'center_focus_strong';
-      document.getElementById('statusText').textContent = text;
-    }
-
-    // ══════════════════════════════════════
-    //  CÁMARA: solo previsualización
-    // ══════════════════════════════════════
     function abrirCamara() {
       var videoEl = document.getElementById('camera-stream');
+      dbg('Abriendo cámara...');
 
       navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } })
         .then(function(mediaStream) {
@@ -156,43 +277,36 @@
           videoEl.srcObject = mediaStream;
           videoEl.setAttribute('playsinline', 'true');
           videoEl.play();
+          var tracks = mediaStream.getVideoTracks();
+          if (tracks.length > 0) {
+            var s = tracks[0].getSettings();
+            dbg('Cámara OK: ' + s.width + 'x' + s.height, 'dbg-ok');
+          }
           setStatus('Apunta al código y pulsa ESCANEAR', 'ready', 'center_focus_strong');
           document.getElementById('btnScan').disabled = false;
         })
         .catch(function(err) {
+          dbg('Cámara error: ' + err.name + ': ' + err.message, 'dbg-err');
           setStatus('Error de cámara: ' + err.message, 'error', 'no_photography');
           document.getElementById('btnScan').disabled = true;
         });
-
-      // ZXing con hints para códigos de barras
-      var hints = new Map();
-      hints.set(ZXing.DecodeHintType.POSSIBLE_FORMATS, [
-        ZXing.BarcodeFormat.EAN_13,
-        ZXing.BarcodeFormat.EAN_8,
-        ZXing.BarcodeFormat.QR_CODE,
-        ZXing.BarcodeFormat.CODE_128,
-        ZXing.BarcodeFormat.UPC_A,
-        ZXing.BarcodeFormat.UPC_E
-      ]);
-      hints.set(ZXing.DecodeHintType.TRY_HARDER, true);
-      codeReader = new ZXing.BrowserMultiFormatReader(hints);
     }
 
     function cerrarCamara() {
       if (stream) { stream.getTracks().forEach(function(t) { t.stop(); }); stream = null; }
-      if (codeReader) { codeReader.reset(); codeReader = null; }
     }
 
     // ══════════════════════════════════════
-    //  ESCANEAR: captura frame → imagen → ZXing
+    //  ESCANEAR: botón manual
     // ══════════════════════════════════════
-    function escanear() {
+    async function escanear() {
       var videoEl = document.getElementById('camera-stream');
       var canvas = document.getElementById('scanCanvas');
       var btn = document.getElementById('btnScan');
 
-      if (!videoEl.videoWidth) {
+      if (!videoEl.videoWidth || videoEl.readyState < videoEl.HAVE_ENOUGH_DATA) {
         setStatus('Cámara no lista — espera un momento', 'error', 'warning');
+        dbg('Video no listo: w=' + videoEl.videoWidth + ' state=' + videoEl.readyState, 'dbg-err');
         return;
       }
 
@@ -200,29 +314,30 @@
       setStatus('Analizando...', 'sending', 'search');
       if (navigator.vibrate) navigator.vibrate(50);
 
-      // 1. Capturar frame del vídeo al canvas
+      // Capturar frame
       canvas.width = videoEl.videoWidth;
       canvas.height = videoEl.videoHeight;
       var ctx = canvas.getContext('2d');
       ctx.drawImage(videoEl, 0, 0, canvas.width, canvas.height);
+      dbg('Frame capturado: ' + canvas.width + 'x' + canvas.height);
 
-      // 2. Canvas → dataURL → elemento <img> → ZXing lo lee
-      var imgEl = document.getElementById('snapImg');
-      imgEl.onload = function() {
-        codeReader.decodeFromImageElement(imgEl)
-          .then(function(result) {
-            var code = result.getText();
-            if (code && code.length >= 8) {
-              enviarALaCaja(code);
-            } else {
-              noDetectado();
-            }
-          })
-          .catch(function(err) {
-            noDetectado();
-          });
-      };
-      imgEl.src = canvas.toDataURL('image/png');
+      // Decodificar (con timeout de seguridad)
+      var timeout = new Promise(function(_, reject) {
+        setTimeout(function() { reject(new Error('Timeout 5s')); }, 5000);
+      });
+
+      try {
+        var code = await Promise.race([decodificarCanvas(canvas), timeout]);
+
+        if (code && code.length >= 8) {
+          enviarALaCaja(code);
+        } else {
+          noDetectado();
+        }
+      } catch (e) {
+        dbg('Escaneo error/timeout: ' + e.message, 'dbg-err');
+        noDetectado();
+      }
     }
 
     function noDetectado() {
@@ -243,8 +358,10 @@
         await fetch(url, { mode: 'no-cors' });
         setStatus('Enviado ✓  ' + code, 'success', 'check_circle');
         document.getElementById('lastCode').textContent = 'Último: ' + code;
+        dbg('Enviado OK: ' + code, 'dbg-ok');
       } catch (e) {
         setStatus('Error de red', 'error', 'error_outline');
+        dbg('Envío error: ' + e.message, 'dbg-err');
       }
 
       setTimeout(function() {
