@@ -42,6 +42,8 @@
     #reader-container { flex: 1; position: relative; background: #000; display: flex; justify-content: center; align-items: center; overflow: hidden; }
     #camera-stream { width: 100%; height: 100%; object-fit: cover; }
     canvas { display: none; }
+    
+    /* Esta guía marca exactamente la zona que ZXing va a recortar y analizar */
     .scan-guide { position: absolute; width: 80%; max-width: 350px; height: 120px; border: 3px solid rgba(0,255,0,0.5); border-radius: 12px; pointer-events: none; z-index: 2; }
     .scan-guide::after { content: ''; display: block; width: 100%; height: 2px; background: red; position: absolute; top: 50%; box-shadow: 0 0 10px red; }
 
@@ -205,7 +207,7 @@
       mostrar('qrReader');
       var videoEl = document.getElementById('qrVideo');
 
-      navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment', width: { ideal: 1920 } } })
+      navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } })
         .then(function(mediaStream) {
           syncStream = mediaStream;
           videoEl.srcObject = mediaStream;
@@ -277,7 +279,7 @@
     }
 
     // ══════════════════════════════════════
-    //  ESCÁNER DE LIBROS (NUEVO MOTOR)
+    //  ESCÁNER DE LIBROS (Mejorado con Recorte y Ráfaga)
     // ══════════════════════════════════════
     function iniciarEscaneo() {
       document.getElementById('badgeCaja').textContent = 'CAJA ' + CAJA;
@@ -289,7 +291,7 @@
     function initDecoders() {
       if ('BarcodeDetector' in window) {
         try {
-          nativeDetector = new BarcodeDetector({ formats: ['ean_13', 'ean_8', 'qr_code', 'code_128'] });
+          nativeDetector = new BarcodeDetector({ formats: ['ean_13', 'ean_8', 'code_128'] });
         } catch(e) { nativeDetector = null; }
       }
       try {
@@ -305,7 +307,7 @@
 
     function abrirCamara() {
       var videoEl = document.getElementById('camera-stream');
-      // Forzamos la máxima calidad posible para que el código no salga borroso
+      // Resolución ideal alta para máxima nitidez en el código de barras
       navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment', width: { ideal: 1920 } } })
         .then(function(mediaStream) {
           stream = mediaStream;
@@ -331,7 +333,7 @@
       document.getElementById('statusText').textContent = text;
     }
 
-    // ── NUEVO MOTOR DE RÁFAGA + RECORTE ──
+    // ── Lógica mejorada para escanear (Ráfaga de 4 fotos) ──
     async function escanear() {
       var videoEl = document.getElementById('camera-stream');
       var btn = document.getElementById('btnScan');
@@ -344,13 +346,15 @@
       setStatus('Analizando...', 'sending', 'search');
       if (navigator.vibrate) navigator.vibrate(50);
 
-      let codigoEncontrado = null;
+      var codigoEncontrado = null;
 
-      // Hacemos 4 "fotos" muy rápidas para asegurar que el código no esté movido
-      for (let i = 0; i < 4; i++) {
-        codigoEncontrado = await procesarUnFrame(videoEl);
+      // Hacemos 4 intentos rápidos (ráfaga) para evitar fotos movidas
+      for (var i = 0; i < 4; i++) {
+        codigoEncontrado = await procesarUnFrameRecortado(videoEl);
         if (codigoEncontrado) break; 
-        await new Promise(r => setTimeout(r, 100));
+        
+        // Pausa de 100ms entre fotos invisibles
+        await new Promise(function(r) { setTimeout(r, 100); });
       }
 
       if (codigoEncontrado && codigoEncontrado.length >= 8) {
@@ -360,14 +364,15 @@
       }
     }
 
-    async function procesarUnFrame(videoEl) {
+    // ── Lógica mejorada de recorte (Crop) para no colgar ZXing ──
+    async function procesarUnFrameRecortado(videoEl) {
       var canvas = document.getElementById('scanCanvas');
       var ctx = canvas.getContext('2d', { willReadFrequently: true });
 
       var vw = videoEl.videoWidth;
       var vh = videoEl.videoHeight;
 
-      // Recortamos solo el rectángulo donde apunta la línea roja (80% ancho, 30% alto)
+      // Recortamos sólo el centro (80% ancho x 30% alto), justo donde está la guía roja
       var cropW = Math.floor(vw * 0.8);
       var cropH = Math.floor(vh * 0.3);
       var startX = Math.floor((vw - cropW) / 2);
@@ -376,10 +381,10 @@
       canvas.width = cropW;
       canvas.height = cropH;
 
-      // Dibujamos solo el recorte, a resolución original
+      // Dibujamos SOLO el recorte (se mantiene la alta calidad original, pero menos píxeles)
       ctx.drawImage(videoEl, startX, startY, cropW, cropH, 0, 0, cropW, cropH);
 
-      // 1. Motor nativo de Apple/Android
+      // Intento 1: Motor nativo (instantáneo en iOS/Android)
       if (nativeDetector) {
         try {
           var barcodes = await nativeDetector.detect(canvas);
@@ -387,7 +392,7 @@
         } catch(e) {}
       }
 
-      // 2. Motor ZXing clásico por Luminancia
+      // Intento 2: Tu motor ZXing original (A prueba de balas)
       if (zxingReader) {
         try {
           var imageData = ctx.getImageData(0, 0, cropW, cropH);
@@ -413,25 +418,31 @@
       }, 1500);
     }
 
-    // ── RED (Intacta de tu código original) ──
+    // ── TU RED ORIGINAL (Funciona perfecto con no-cors y doGet) ──
     async function enviarALaCaja(code) {
       if (navigator.vibrate) navigator.vibrate(100);
       setStatus('Enviando ' + code + '...', 'sending', 'wifi_tethering');
+      
       try {
         var sep = API_URL.includes('?') ? '&' : '?';
         var url = API_URL + sep + 'page=api&action=setScannerCode&caja=' + encodeURIComponent(CAJA) + '&codigo=' + encodeURIComponent(code);
+        
+        // Petición GET opaca (no se lee la respuesta con .json(), que es lo que rompía todo antes)
         await fetch(url, { mode: 'no-cors' });
+        
         setStatus('Enviado ✓  ' + code, 'success', 'check_circle');
         document.getElementById('lastCode').textContent = 'Último: ' + code;
       } catch(e) {
         setStatus('Error de red', 'error', 'error_outline');
       }
+      
       setTimeout(function() {
         setStatus('Apunta al código y pulsa ESCANEAR', 'ready', 'center_focus_strong');
         document.getElementById('btnScan').disabled = false;
       }, 1500);
     }
 
+    // ── Arranque ──
     cargar();
     window.addEventListener('beforeunload', function() { cerrarCamara(); cerrarSyncStream(); });
   </script>
