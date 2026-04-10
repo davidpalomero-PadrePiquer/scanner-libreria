@@ -6,11 +6,11 @@
   <title>Escáner Móvil</title>
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200" />
   
+  <script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.min.js"></script>
   <script type="text/javascript" src="https://unpkg.com/@zxing/library@latest"></script>
   
   <style>
     * { box-sizing: border-box; margin: 0; padding: 0; }
-    /* Uso de 100dvh para que Safari respete la barra de direcciones real */
     body { font-family: 'Segoe UI', sans-serif; background: #121212; color: white; height: 100vh; height: 100dvh; display: flex; flex-direction: column; overflow: hidden; }
 
     .header { background: #1a237e; padding: 16px; text-align: center; font-weight: bold; font-size: 1.2rem; display: flex; align-items: center; justify-content: center; gap: 8px; z-index: 10;}
@@ -22,15 +22,12 @@
     .btn-main:active { transform: scale(0.98); }
     .btn-secondary { background: transparent; color: #ffab91; border: 2px solid #ffab91; padding: 12px 20px; border-radius: 8px; font-size: 1rem; font-weight: bold; cursor: pointer; display: flex; align-items: center; gap: 8px; }
 
-    /* ── NUEVO DISEÑO DEL MODAL DE CÁMARA (A PRUEBA DE SAFARI) ── */
+    /* Modal de Cámara */
     #camera-modal { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: #000; z-index: 50; display: flex; flex-direction: column; }
-    
-    /* 1. Cabecera de la cámara */
     .camera-header { background: #111; padding: 15px 20px; padding-top: calc(15px + env(safe-area-inset-top)); display: flex; justify-content: space-between; align-items: center; z-index: 10;}
     #camera-title { font-weight: bold; font-size: 1.1rem; color: #fff;}
     .btn-cancel { background: #444; color: white; border: none; padding: 10px 16px; border-radius: 8px; font-size: 0.95rem; font-weight: bold; cursor: pointer; }
 
-    /* 2. Zona central del vídeo */
     #video-container { flex: 1; position: relative; display: flex; justify-content: center; align-items: center; overflow: hidden; background: #000;}
     video { width: 100%; height: 100%; object-fit: cover; position: absolute; top:0; left:0;}
     canvas { display: none; }
@@ -40,7 +37,6 @@
     .guide-barcode { width: 90%; max-width: 400px; height: 150px; border-radius: 12px; }
     .guide-barcode::after { content: ''; display: block; width: 100%; height: 2px; background: red; position: absolute; top: 50%; box-shadow: 0 0 10px red; }
 
-    /* 3. Pie de la cámara (Zona segura para el botón) */
     .camera-footer { background: #111; padding: 20px; padding-bottom: calc(20px + env(safe-area-inset-bottom)); display: flex; justify-content: center; align-items: center; z-index: 10;}
     #btn-capture { padding: 18px 50px; font-size: 1.2rem; font-weight: bold; color: white; background: #2e7d32; border: none; border-radius: 14px; cursor: pointer; display: flex; align-items: center; gap: 10px; width: 100%; max-width: 300px; justify-content: center;}
     #btn-capture:active { background: #1b5e20; transform: scale(0.98); }
@@ -119,14 +115,14 @@
     });
 
     function initDecoders() {
+      // API Nativa (Safari 17+ / Chrome Android)
       if ('BarcodeDetector' in window) {
         try { nativeDetector = new BarcodeDetector({ formats: ['qr_code', 'ean_13', 'ean_8', 'code_128'] }); } catch(e) {}
       }
+      // ZXing como plan B para códigos de barras
       try {
         const hints = new Map();
-        hints.set(ZXing.DecodeHintType.POSSIBLE_FORMATS, [
-          ZXing.BarcodeFormat.QR_CODE, ZXing.BarcodeFormat.EAN_13, ZXing.BarcodeFormat.EAN_8
-        ]);
+        hints.set(ZXing.DecodeHintType.POSSIBLE_FORMATS, [ZXing.BarcodeFormat.EAN_13, ZXing.BarcodeFormat.EAN_8]);
         hints.set(ZXing.DecodeHintType.TRY_HARDER, true);
         zxingReader = new ZXing.BrowserMultiFormatReader(hints);
       } catch(e) {}
@@ -198,9 +194,9 @@
       document.getElementById('camera-modal').classList.add('hidden');
     }
 
+    // ── LA GRAN MEJORA: CAPTURA EN RÁFAGA ──
     async function capturarFrame() {
       const videoEl = document.getElementById('video');
-      const canvas = document.getElementById('scanCanvas');
       const btn = document.getElementById('btn-capture');
 
       if (!videoEl.videoWidth || videoEl.readyState < videoEl.HAVE_ENOUGH_DATA) return;
@@ -209,39 +205,51 @@
       btn.disabled = true;
       btn.innerHTML = '<span class="material-symbols-outlined">hourglass_empty</span> ANALIZANDO...';
 
-      canvas.width = videoEl.videoWidth;
-      canvas.height = videoEl.videoHeight;
-      const ctx = canvas.getContext('2d');
-      ctx.drawImage(videoEl, 0, 0);
+      let codigoEncontrado = null;
 
-      try {
-        const codigo = await decodificarCanvas(canvas);
-        if (codigo) procesarResultado(codigo);
-        else falloDeteccion(btn);
-      } catch (e) {
+      // Hacemos 8 intentos (aprox 1 segundo) para sortear el refresco de pantalla
+      for (let i = 0; i < 8; i++) {
+        try {
+          codigoEncontrado = await analizarUnFrame(videoEl);
+          if (codigoEncontrado) break; 
+        } catch (e) {}
+        
+        // Esperamos 100ms antes de la siguiente "foto" invisible
+        await new Promise(r => setTimeout(r, 100));
+      }
+
+      if (codigoEncontrado) {
+        procesarResultado(codigoEncontrado);
+      } else {
         falloDeteccion(btn);
       }
     }
 
-    function falloDeteccion(btn) {
-      showNotif('No se detectó código. Reintenta.', 'error', 'warning');
-      setTimeout(() => {
-        btn.disabled = false;
-        btn.innerHTML = '<span class="material-symbols-outlined">center_focus_strong</span> ESCANEAR';
-      }, 1500);
-    }
+    async function analizarUnFrame(videoEl) {
+      const canvas = document.getElementById('scanCanvas');
+      canvas.width = videoEl.videoWidth;
+      canvas.height = videoEl.videoHeight;
+      const ctx = canvas.getContext('2d', { willReadFrequently: true });
+      ctx.drawImage(videoEl, 0, 0, canvas.width, canvas.height);
+      const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
 
-    async function decodificarCanvas(canvas) {
+      // 1. Detector Nativo de Apple/Android (El más rápido)
       if (nativeDetector) {
         try {
           const barcodes = await nativeDetector.detect(canvas);
           if (barcodes.length > 0) return barcodes[0].rawValue;
         } catch(e) {}
       }
-      if (zxingReader) {
+
+      // 2. jsQR (Especialista para códigos QR en pantallas)
+      if (currentMode === 'qr' && typeof jsQR !== 'undefined') {
+        const qrCode = jsQR(imageData.data, imageData.width, imageData.height, { inversionAttempts: "dontInvert" });
+        if (qrCode) return qrCode.data;
+      }
+
+      // 3. ZXing (Para códigos de barras tradicionales)
+      if (currentMode === 'barcode' && zxingReader) {
         try {
-          const ctx = canvas.getContext('2d');
-          const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
           const len = imageData.data.length;
           const lum = new Uint8ClampedArray(len / 4);
           for (let i = 0; i < len; i += 4) {
@@ -254,6 +262,14 @@
         } catch(e) {}
       }
       return null;
+    }
+
+    function falloDeteccion(btn) {
+      showNotif('No se detectó código. Reintenta.', 'error', 'warning');
+      setTimeout(() => {
+        btn.disabled = false;
+        btn.innerHTML = '<span class="material-symbols-outlined">center_focus_strong</span> ESCANEAR';
+      }, 1500);
     }
 
     function procesarResultado(text) {
