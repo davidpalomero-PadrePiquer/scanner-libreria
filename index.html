@@ -7,7 +7,7 @@
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200" />
   
   <script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.min.js"></script>
-  <script type="text/javascript" src="https://unpkg.com/@zxing/library@0.21.3"></script>
+  <script type="text/javascript" src="https://unpkg.com/@zxing/library@latest"></script>
   
   <style>
     * { box-sizing: border-box; margin: 0; padding: 0; }
@@ -22,7 +22,7 @@
     .btn-main:active { transform: scale(0.98); }
     .btn-secondary { background: transparent; color: #ffab91; border: 2px solid #ffab91; padding: 12px 20px; border-radius: 8px; font-size: 1rem; font-weight: bold; cursor: pointer; display: flex; align-items: center; gap: 8px; }
 
-    /* Modal de Cámara */
+    /* Modal de Cámara (3 bloques para evitar bug de Safari) */
     #camera-modal { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: #000; z-index: 50; display: flex; flex-direction: column; }
     .camera-header { background: #111; padding: 15px 20px; padding-top: calc(15px + env(safe-area-inset-top)); display: flex; justify-content: space-between; align-items: center; z-index: 10;}
     #camera-title { font-weight: bold; font-size: 1.1rem; color: #fff;}
@@ -91,13 +91,13 @@
     </div>
     
     <div id="video-container">
-      <video id="camera-stream" autoplay playsinline muted></video>
+      <video id="video" autoplay playsinline muted></video>
       <canvas id="scanCanvas"></canvas>
       <div id="scan-guide" class="scan-guide"></div>
     </div>
 
     <div class="camera-footer">
-      <button id="btn-capture" onclick="iniciarCaptura()">
+      <button id="btn-capture" onclick="capturarFrame()">
         <span class="material-symbols-outlined">center_focus_strong</span> ESCANEAR
       </button>
     </div>
@@ -114,7 +114,6 @@
     });
 
     function initDecoders() {
-      // Intentamos inicializar el motor nativo de Apple/Android si existe
       if ('BarcodeDetector' in window) {
         try { 
           nativeDetector = new BarcodeDetector({ 
@@ -152,13 +151,11 @@
       setTimeout(() => notif.className = '', 3000);
     }
 
-    async function abrirCamara(mode) {
+    function abrirCamara(mode) {
       currentMode = mode;
       document.getElementById('camera-modal').classList.remove('hidden');
-      
-      const btn = document.getElementById('btn-capture');
-      btn.disabled = false;
-      btn.innerHTML = '<span class="material-symbols-outlined">center_focus_strong</span> ESCANEAR';
+      document.getElementById('btn-capture').disabled = false;
+      document.getElementById('btn-capture').innerHTML = '<span class="material-symbols-outlined">center_focus_strong</span> ESCANEAR';
       
       const guide = document.getElementById('scan-guide');
       const title = document.getElementById('camera-title');
@@ -171,19 +168,17 @@
         title.textContent = 'Apunta al código del libro';
       }
 
-      try {
-        // Pedimos cámara trasera de alta calidad si es posible
-        stream = await navigator.mediaDevices.getUserMedia({ 
-          video: { facingMode: "environment", width: { ideal: 1920 }, height: { ideal: 1080 } } 
+      navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment" } })
+        .then(mediaStream => {
+          stream = mediaStream;
+          const videoEl = document.getElementById('video');
+          videoEl.srcObject = mediaStream;
+          videoEl.play();
+        })
+        .catch(err => {
+          cerrarCamara();
+          showNotif('Permiso de cámara denegado', 'error', 'no_photography');
         });
-        const videoElement = document.getElementById('camera-stream');
-        videoElement.srcObject = stream;
-        videoElement.setAttribute('playsinline', true);
-        videoElement.play();
-      } catch (err) {
-        cerrarCamara();
-        showNotif('Permiso de cámara denegado', 'error', 'no_photography');
-      }
     }
 
     function cerrarCamara() {
@@ -194,9 +189,9 @@
       document.getElementById('camera-modal').classList.add('hidden');
     }
 
-    // ── GESTOR DE CAPTURA (Mini-Ráfaga) ──
-    async function iniciarCaptura() {
-      const videoEl = document.getElementById('camera-stream');
+    async function capturarFrame() {
+      const videoEl = document.getElementById('video');
+      const canvas = document.getElementById('scanCanvas');
       const btn = document.getElementById('btn-capture');
 
       if (!videoEl.videoWidth || videoEl.readyState < videoEl.HAVE_ENOUGH_DATA) return;
@@ -205,60 +200,34 @@
       btn.disabled = true;
       btn.innerHTML = '<span class="material-symbols-outlined">hourglass_empty</span> ANALIZANDO...';
 
-      let codigoEncontrado = null;
+      canvas.width = videoEl.videoWidth;
+      canvas.height = videoEl.videoHeight;
+      const ctx = canvas.getContext('2d', { willReadFrequently: true });
+      ctx.drawImage(videoEl, 0, 0);
 
-      // Hacemos hasta 4 intentos rápidos (por si el usuario movió la mano)
-      for (let i = 0; i < 4; i++) {
-        codigoEncontrado = await procesarUnFrame(videoEl);
-        if (codigoEncontrado) break; 
-        
-        // Esperamos 100ms antes del siguiente intento de la ráfaga
-        await new Promise(r => setTimeout(r, 100));
-      }
-
-      if (codigoEncontrado) {
-        procesarFinal(codigoEncontrado);
-      } else {
-        showNotif('No se detectó código. Reintenta.', 'error', 'warning');
-        setTimeout(() => {
-          btn.disabled = false;
-          btn.innerHTML = '<span class="material-symbols-outlined">center_focus_strong</span> ESCANEAR';
-        }, 1500);
+      try {
+        const codigo = await decodificarCanvas(canvas);
+        if (codigo) procesarResultado(codigo);
+        else falloDeteccion(btn);
+      } catch (e) {
+        falloDeteccion(btn);
       }
     }
 
-    // ── EL RECORTE INTELIGENTE Y ANÁLISIS ──
-    async function procesarUnFrame(videoEl) {
-      const canvas = document.getElementById('scanCanvas');
-      const ctx = canvas.getContext('2d', { willReadFrequently: true });
+    function falloDeteccion(btn) {
+      showNotif('No se detectó código. Reintenta.', 'error', 'warning');
+      setTimeout(() => {
+        btn.disabled = false;
+        btn.innerHTML = '<span class="material-symbols-outlined">center_focus_strong</span> ESCANEAR';
+      }, 1500);
+    }
 
-      const vw = videoEl.videoWidth;
-      const vh = videoEl.videoHeight;
-      let cropW, cropH;
+    // ── EL MOTOR EXTRAÍDO DE TU CÓDIGO (100% FIEL A TU INDEX) ──
+    async function decodificarCanvas(canvas) {
+      const ctx = canvas.getContext('2d');
+      const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
 
-      // Definimos el tamaño del recorte basado en lo que estamos buscando
-      if (currentMode === 'qr') {
-        // Para QR recortamos un cuadrado central (60% de la pantalla)
-        cropW = Math.floor(Math.min(vw, vh) * 0.6);
-        cropH = cropW;
-      } else {
-        // Para código de barras recortamos un rectángulo central
-        cropW = Math.floor(vw * 0.8);
-        cropH = Math.floor(vh * 0.3);
-      }
-
-      const startX = Math.floor((vw - cropW) / 2);
-      const startY = Math.floor((vh - cropH) / 2);
-
-      canvas.width = cropW;
-      canvas.height = cropH;
-
-      // Dibujamos SOLO el recorte (Resolución 1:1, nada de emborronamientos)
-      ctx.drawImage(videoEl, startX, startY, cropW, cropH, 0, 0, cropW, cropH);
-
-      const imageData = ctx.getImageData(0, 0, cropW, cropH);
-
-      // 1. Prioridad: Lector Nativo (Rapidísimo)
+      // 1. Prioridad: Lector Nativo (iOS 17+ / Chrome Android)
       if (nativeDetector) {
         try {
           const barcodes = await nativeDetector.detect(canvas);
@@ -266,13 +235,13 @@
         } catch(e) {}
       }
 
-      // 2. Especialista QR
+      // 2. Si buscamos un QR -> Usamos jsQR
       if (currentMode === 'qr' && typeof jsQR !== 'undefined') {
         const qrCode = jsQR(imageData.data, imageData.width, imageData.height, { inversionAttempts: "dontInvert" });
         if (qrCode) return qrCode.data;
       }
 
-      // 3. Especialista Códigos de Barras (El ZXing a prueba de fallos que creaste)
+      // 3. Si buscamos código de barras -> Usamos la lógica de Luminancia ZXing que escribiste tú
       if (currentMode === 'barcode' && typeof ZXing !== 'undefined') {
         try {
           const len = imageData.data.length;
@@ -280,13 +249,14 @@
           for (let i = 0; i < len; i += 4) {
             lum[i / 4] = Math.round(imageData.data[i] * 0.299 + imageData.data[i+1] * 0.587 + imageData.data[i+2] * 0.114);
           }
-          const source = new ZXing.RGBLuminanceSource(lum, cropW, cropH);
+          const source = new ZXing.RGBLuminanceSource(lum, canvas.width, canvas.height);
           const bitmap = new ZXing.BinaryBitmap(new ZXing.HybridBinarizer(source));
           
           const reader = new ZXing.MultiFormatReader();
           const hints = new Map();
           hints.set(ZXing.DecodeHintType.POSSIBLE_FORMATS, [
-            ZXing.BarcodeFormat.EAN_13, ZXing.BarcodeFormat.EAN_8, ZXing.BarcodeFormat.CODE_128
+            ZXing.BarcodeFormat.EAN_13, ZXing.BarcodeFormat.EAN_8,
+            ZXing.BarcodeFormat.CODE_128, ZXing.BarcodeFormat.UPC_A, ZXing.BarcodeFormat.UPC_E
           ]);
           hints.set(ZXing.DecodeHintType.TRY_HARDER, true);
           reader.setHints(hints);
@@ -299,8 +269,7 @@
       return null;
     }
 
-    // ── GESTIÓN DEL RESULTADO Y ENVÍO A GOOGLE ──
-    function procesarFinal(text) {
+    function procesarResultado(text) {
       if (currentMode === 'qr') {
         if (text.includes('"url"') && text.includes('"caja"')) {
           try {
@@ -313,18 +282,24 @@
               showNotif('¡Caja ' + config.caja + ' vinculada!', 'success', 'check_circle');
               comprobarEstado();
             }
-          } catch(e) {}
+          } catch(e) { falloDeteccion(document.getElementById('btn-capture')); }
+        } else {
+          falloDeteccion(document.getElementById('btn-capture'));
         }
       } 
       else if (currentMode === 'barcode') {
+        // Validación básica de código de barras (evitamos leer basura menor de 8 dígitos)
         if (text.length >= 8 && !text.includes('"url"')) {
           cerrarCamara();
           if (navigator.vibrate) navigator.vibrate(100);
           enviarALaCaja(text);
+        } else {
+          falloDeteccion(document.getElementById('btn-capture'));
         }
       }
     }
 
+    // ── CONEXIÓN CLONADA DE TU INDEX (`fetch` por método GET + `no-cors`) ──
     async function enviarALaCaja(codigoLibro) {
       const apiUrl = localStorage.getItem('apiUrl');
       const caja = localStorage.getItem('cajaId');
