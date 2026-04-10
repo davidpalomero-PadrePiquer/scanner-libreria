@@ -2,346 +2,438 @@
 <html lang="es">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
   <title>Escáner Móvil</title>
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200" />
-  
-  <script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.min.js"></script>
   <script type="text/javascript" src="https://unpkg.com/@zxing/library@0.21.3"></script>
-  
   <style>
     * { box-sizing: border-box; margin: 0; padding: 0; }
-    body { font-family: 'Segoe UI', sans-serif; background: #121212; color: white; height: 100vh; height: 100dvh; display: flex; flex-direction: column; overflow: hidden; }
+    body { font-family: 'Segoe UI', sans-serif; background: #121212; color: white; height: 100vh; display: flex; flex-direction: column; overflow: hidden; }
+    .header { background: #1a237e; padding: 14px 16px; text-align: center; font-weight: bold; font-size: 1.1rem; display: flex; align-items: center; justify-content: center; gap: 8px; }
+    .badge { background: #ff6f00; padding: 4px 12px; border-radius: 20px; font-size: 0.85rem; }
 
-    .header { background: #1a237e; padding: 16px; text-align: center; font-weight: bold; font-size: 1.2rem; display: flex; align-items: center; justify-content: center; gap: 8px; z-index: 10;}
-    
-    .view { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 20px; text-align: center; }
-    .hidden { display: none !important; }
+    /* ── Pantalla SYNC ── */
+    #syncScreen { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 24px; gap: 20px; }
+    #syncScreen h2 { font-size: 1.3rem; text-align: center; }
+    .btn-sync { background: #ff6f00; color: white; border: none; padding: 16px 36px; border-radius: 12px; font-size: 1.1rem; font-weight: bold; cursor: pointer; display: flex; align-items: center; gap: 10px; }
+    .btn-manual { background: transparent; color: #888; border: 1px solid #444; padding: 10px 20px; border-radius: 8px; font-size: 0.85rem; cursor: pointer; margin-top: 10px; }
+    .connected-info { background: #1b5e20; padding: 12px 20px; border-radius: 10px; text-align: center; font-size: 0.95rem; max-width: 350px; }
+    .connected-info strong { color: #69f0ae; }
 
-    .btn-main { background: #ff6f00; color: white; border: none; padding: 18px 30px; border-radius: 12px; font-size: 1.2rem; font-weight: bold; cursor: pointer; display: flex; align-items: center; gap: 10px; width: 100%; max-width: 300px; justify-content: center; box-shadow: 0 4px 12px rgba(255, 111, 0, 0.4); margin-bottom: 20px;}
-    .btn-main:active { transform: scale(0.98); }
-    .btn-secondary { background: transparent; color: #ffab91; border: 2px solid #ffab91; padding: 12px 20px; border-radius: 8px; font-size: 1rem; font-weight: bold; cursor: pointer; display: flex; align-items: center; gap: 8px; }
+    /* ── Pantalla QR Reader (sincronización) ── */
+    #qrReader { display: none; flex: 1; flex-direction: column; }
+    #qrReader .header { background: #ff6f00; }
+    #qrReaderContainer { flex: 1; position: relative; background: #000; display: flex; justify-content: center; align-items: center; overflow: hidden; }
+    #qrReaderContainer video { width: 100%; height: 100%; object-fit: cover; }
+    .qr-guide { position: absolute; width: 220px; height: 220px; border: 3px solid rgba(255,255,255,0.6); border-radius: 16px; pointer-events: none; z-index: 2; }
+    #qrStatus { padding: 16px; text-align: center; color: #aaa; font-size: 0.95rem; }
+    .btn-cancel { background: rgba(255,255,255,0.15); color: #ccc; border: none; padding: 10px 20px; border-radius: 8px; font-size: 0.9rem; cursor: pointer; }
 
-    /* Modal de Cámara */
-    #camera-modal { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: #000; z-index: 50; display: flex; flex-direction: column; }
-    .camera-header { background: #111; padding: 15px 20px; padding-top: calc(15px + env(safe-area-inset-top)); display: flex; justify-content: space-between; align-items: center; z-index: 10;}
-    #camera-title { font-weight: bold; font-size: 1.1rem; color: #fff;}
-    .btn-cancel { background: #444; color: white; border: none; padding: 10px 16px; border-radius: 8px; font-size: 0.95rem; font-weight: bold; cursor: pointer; }
+    /* ── Config manual (colapsable) ── */
+    #manualConfig { display: none; width: 100%; max-width: 400px; padding: 16px; background: #1e1e1e; border-radius: 10px; }
+    #manualConfig.visible { display: block; }
+    #manualConfig label { display: block; font-size: 0.8rem; color: #aaa; margin: 8px 0 4px; }
+    #manualConfig input { width: 100%; padding: 10px; border: 2px solid #333; border-radius: 8px; background: #2a2a2a; color: white; font-size: 0.95rem; }
+    #manualConfig input:focus { border-color: #ff6f00; outline: none; }
+    .btn-connect { background: #2e7d32; color: white; border: none; padding: 10px 24px; border-radius: 8px; font-size: 0.95rem; font-weight: bold; cursor: pointer; margin-top: 12px; width: 100%; }
 
-    #video-container { flex: 1; position: relative; display: flex; justify-content: center; align-items: center; overflow: hidden; background: #000;}
-    video { width: 100%; height: 100%; object-fit: cover; position: absolute; top:0; left:0;}
+    /* ── Pantalla ESCÁNER ── */
+    #scanner { display: none; flex: 1; flex-direction: column; }
+    #reader-container { flex: 1; position: relative; background: #000; display: flex; justify-content: center; align-items: center; overflow: hidden; }
+    #camera-stream { width: 100%; height: 100%; object-fit: cover; }
     canvas { display: none; }
-    
-    .scan-guide { position: absolute; border: 3px solid rgba(0, 255, 0, 0.7); box-shadow: 0 0 0 4000px rgba(0,0,0,0.7); pointer-events: none; transition: all 0.3s; z-index: 2;}
-    .guide-qr { width: 250px; height: 250px; border-radius: 16px; }
-    .guide-barcode { width: 90%; max-width: 400px; height: 150px; border-radius: 12px; }
-    .guide-barcode::after { content: ''; display: block; width: 100%; height: 2px; background: red; position: absolute; top: 50%; box-shadow: 0 0 10px red; }
+    .scan-guide { position: absolute; width: 80%; max-width: 350px; height: 120px; border: 3px solid rgba(0,255,0,0.5); border-radius: 12px; pointer-events: none; z-index: 2; }
+    .scan-guide::after { content: ''; display: block; width: 100%; height: 2px; background: red; position: absolute; top: 50%; box-shadow: 0 0 10px red; }
 
-    .camera-footer { background: #111; padding: 20px; padding-bottom: calc(20px + env(safe-area-inset-bottom)); display: flex; justify-content: center; align-items: center; z-index: 10;}
-    #btn-capture { padding: 18px 50px; font-size: 1.2rem; font-weight: bold; color: white; background: #2e7d32; border: none; border-radius: 14px; cursor: pointer; display: flex; align-items: center; gap: 10px; width: 100%; max-width: 300px; justify-content: center;}
-    #btn-capture:active { background: #1b5e20; transform: scale(0.98); }
-    #btn-capture:disabled { background: #555; opacity: 0.7; pointer-events: none;}
+    #btnScan {
+      position: absolute; bottom: 20px; left: 50%; transform: translateX(-50%);
+      padding: 18px 50px; font-size: 22px; font-weight: bold;
+      color: white; background: #2e7d32; border: none; border-radius: 14px;
+      cursor: pointer; z-index: 5; opacity: 0.85;
+      display: flex; align-items: center; gap: 10px;
+    }
+    #btnScan:active { background: #1b5e20; opacity: 1; }
+    #btnScan:disabled { background: #555; opacity: 0.5; }
 
-    /* Notificaciones */
-    #notification { position: fixed; top: 20px; left: 50%; transform: translateX(-50%); background: #333; color: white; padding: 12px 24px; border-radius: 30px; font-weight: bold; z-index: 100; display: flex; align-items: center; gap: 8px; box-shadow: 0 4px 12px rgba(0,0,0,0.5); opacity: 0; pointer-events: none; transition: opacity 0.3s;}
-    #notification.visible { opacity: 1; }
-    #notification.success { background: #2e7d32; }
-    #notification.error { background: #c62828; }
-    #notification.info { background: #1565c0; }
-    
-    .status-text { font-size: 0.95rem; color: #aaa; margin-bottom: 30px; max-width: 300px;}
-    .highlight-box { background: rgba(0, 255, 0, 0.1); padding: 15px 30px; border-radius: 12px; margin-bottom: 30px; border: 2px solid #4caf50;}
-    .highlight-box h3 { font-size: 1.8rem; color: #4caf50; margin: 0;}
+    .status-bar { padding: 14px; text-align: center; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 8px; }
+    .status-row { display: flex; align-items: center; gap: 8px; font-weight: 600; font-size: 1rem; }
+    .status-row.success { color: #4caf50; }
+    .status-row.sending { color: #ffeb3b; }
+    .status-row.error { color: #f44336; }
+    .status-row.ready { color: #b0bec5; }
+    .last-code { font-size: 0.85rem; color: #888; }
+    .btn-change { background: rgba(255,255,255,0.15); color: #ccc; border: none; padding: 6px 14px; border-radius: 6px; font-size: 0.8rem; cursor: pointer; }
   </style>
 </head>
 <body>
 
-  <div id="notification"><span class="material-symbols-outlined" id="notif-icon">info</span> <span id="notif-text">Mensaje</span></div>
+  <div id="syncScreen">
+    <span class="material-symbols-outlined" style="font-size:64px; color:#ff6f00;">qr_code_scanner</span>
+    <h2>Escáner Móvil</h2>
 
-  <div class="header">
-    <span class="material-symbols-outlined">qr_code_scanner</span> Escáner Móvil
-  </div>
-
-  <div id="view-setup" class="view">
-    <span class="material-symbols-outlined" style="font-size: 4rem; color: #ff6f00; margin-bottom: 10px;">phonelink_setup</span>
-    <h2 style="margin-bottom: 10px;">Vincular Caja</h2>
-    <p class="status-text">Abre la pantalla de la caja en el ordenador, dale a "Vincular" y escanea el código QR que aparece.</p>
-    <button class="btn-main" onclick="abrirCamara('qr')">
-      <span class="material-symbols-outlined">qr_code_2</span> Escanear QR
-    </button>
-  </div>
-
-  <div id="view-scanner" class="view hidden">
-    <span class="material-symbols-outlined" style="font-size: 4rem; color: #4caf50; margin-bottom: 15px;">point_of_sale</span>
-    <div class="highlight-box"><h3 id="caja-label">CAJA 1</h3></div>
-    <button class="btn-main" onclick="abrirCamara('barcode')">
-      <span class="material-symbols-outlined">barcode_scanner</span> Escanear Libro
-    </button>
-    <div style="margin-top: 20px; padding-top: 20px; width: 100%; display: flex; justify-content: center;">
-      <button class="btn-secondary" onclick="desvincular()">
-        <span class="material-symbols-outlined">link_off</span> Cambiar de Caja
+    <div class="connected-info" id="savedInfo" style="display:none;">
+      <span class="material-symbols-outlined" style="font-size:18px; vertical-align:middle;">link</span>
+      Última conexión: <strong id="savedCajaLabel">Caja 1</strong>
+      <br><button class="btn-sync" style="margin-top:12px; font-size:1rem; padding:12px 28px;" onclick="usarGuardada()">
+        <span class="material-symbols-outlined">play_arrow</span> Continuar
       </button>
     </div>
+
+    <p style="color:#aaa; text-align:center; max-width:320px; font-size:0.9rem;">
+      Escanea el código QR que aparece en la pantalla de la caja para vincular este móvil.
+    </p>
+
+    <button class="btn-sync" onclick="abrirSyncQR()">
+      <span class="material-symbols-outlined">qr_code_2</span> Sincronizar con Caja
+    </button>
+
+    <button class="btn-manual" onclick="toggleManual()">
+      <span class="material-symbols-outlined" style="font-size:16px; vertical-align:middle;">edit</span>
+      Configurar manualmente
+    </button>
+
+    <div id="manualConfig">
+      <label>URL del sistema (Apps Script)</label>
+      <input type="url" id="inputUrl" placeholder="https://script.google.com/macros/s/.../exec" />
+      <label>Número de Caja</label>
+      <input type="number" id="inputCaja" value="1" min="1" max="99" />
+      <button class="btn-connect" onclick="conectarManual()">Conectar</button>
+    </div>
   </div>
 
-  <div id="camera-modal" class="hidden">
-    <div class="camera-header">
-      <div id="camera-title">Apunta al código</div>
-      <button class="btn-cancel" onclick="cerrarCamara()">Cancelar</button>
+  <div id="qrReader">
+    <div class="header" style="background:#ff6f00;">
+      <span class="material-symbols-outlined">qr_code_2</span> Escanea el QR de la Caja
     </div>
-    
-    <div id="video-container">
-      <video id="camera-stream" autoplay playsinline muted></video>
-      <canvas id="scanCanvas"></canvas>
-      <div id="scan-guide" class="scan-guide"></div>
+    <div id="qrReaderContainer">
+      <video id="qrVideo" autoplay playsinline muted></video>
+      <div class="qr-guide"></div>
+    </div>
+    <div id="qrStatus">
+      <p>Apunta al código QR de la pantalla del ordenador</p>
+      <button class="btn-cancel" onclick="cerrarSyncQR()" style="margin-top:12px;">Cancelar</button>
+    </div>
+  </div>
+
+  <div id="scanner">
+    <div class="header">
+      <span class="material-symbols-outlined">qr_code_scanner</span> Escáner Móvil
+      <span class="badge" id="badgeCaja">CAJA 1</span>
     </div>
 
-    <div class="camera-footer">
-      <button id="btn-capture" onclick="iniciarCaptura()">
+    <div id="reader-container">
+      <video id="camera-stream" autoplay playsinline muted></video>
+      <canvas id="scanCanvas"></canvas>
+      <div class="scan-guide"></div>
+      <button id="btnScan" onclick="escanear()">
         <span class="material-symbols-outlined">center_focus_strong</span> ESCANEAR
+      </button>
+    </div>
+
+    <div class="status-bar">
+      <div class="status-row ready" id="statusRow">
+        <span class="material-symbols-outlined" id="statusIcon">center_focus_strong</span>
+        <span id="statusText">Apunta al código y pulsa ESCANEAR</span>
+      </div>
+      <div class="last-code" id="lastCode"></div>
+      <button class="btn-change" onclick="desconectar()">
+        <span class="material-symbols-outlined" style="font-size:14px; vertical-align:middle;">link_off</span>
+        Cambiar caja
       </button>
     </div>
   </div>
 
   <script>
-    let currentMode = ''; 
-    let stream = null;
-    let nativeDetector = null;
+    // ── ESTADO ORIGINAL ──
+    var API_URL = '';
+    var CAJA = '1';
+    var stream = null;
+    var syncStream = null;
+    var nativeDetector = null;
+    var zxingReader = null;
 
-    window.addEventListener('load', () => {
+    // ══════════════════════════════════════
+    //  PERSISTENCIA Y NAVEGACIÓN
+    // ══════════════════════════════════════
+    function guardar() {
+      try { localStorage.setItem('scanner_url', API_URL); localStorage.setItem('scanner_caja', CAJA); } catch(e) {}
+    }
+    function cargar() {
+      try {
+        var u = localStorage.getItem('scanner_url');
+        var c = localStorage.getItem('scanner_caja');
+        if (u && c) {
+          API_URL = u; CAJA = c;
+          document.getElementById('inputUrl').value = u;
+          document.getElementById('inputCaja').value = c;
+          document.getElementById('savedCajaLabel').textContent = 'Caja ' + c;
+          document.getElementById('savedInfo').style.display = 'block';
+        }
+      } catch(e) {}
+    }
+
+    function mostrar(id) {
+      ['syncScreen', 'qrReader', 'scanner'].forEach(function(s) {
+        document.getElementById(s).style.display = 'none';
+      });
+      document.getElementById(id).style.display = 'flex';
+    }
+
+    function usarGuardada() { iniciarEscaneo(); }
+
+    function conectarManual() {
+      var url = document.getElementById('inputUrl').value.trim();
+      var caja = document.getElementById('inputCaja').value.trim();
+      if (!url || !url.includes('script.google.com')) { alert('URL no válida'); return; }
+      API_URL = url;
+      CAJA = caja || '1';
+      guardar();
+      iniciarEscaneo();
+    }
+
+    function desconectar() {
+      cerrarCamara();
+      mostrar('syncScreen');
+    }
+
+    function toggleManual() { document.getElementById('manualConfig').classList.toggle('visible'); }
+
+    // ══════════════════════════════════════
+    //  SYNC: Leer QR de la Caja
+    // ══════════════════════════════════════
+    function abrirSyncQR() {
+      mostrar('qrReader');
+      var videoEl = document.getElementById('qrVideo');
+
+      navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment', width: { ideal: 1920 } } })
+        .then(function(mediaStream) {
+          syncStream = mediaStream;
+          videoEl.srcObject = mediaStream;
+          videoEl.play();
+          iniciarLecturaQR();
+        })
+        .catch(function(err) {
+          document.getElementById('qrStatus').innerHTML =
+            '<p style="color:#f44;">Error de cámara: ' + err.message + '</p>' +
+            '<button class="btn-cancel" onclick="cerrarSyncQR()" style="margin-top:12px;">Volver</button>';
+        });
+    }
+
+    function iniciarLecturaQR() {
+      var videoEl = document.getElementById('qrVideo');
+      var canvas = document.createElement('canvas');
+      var ctx = canvas.getContext('2d');
+
+      var interval = setInterval(function() {
+        if (!syncStream) { clearInterval(interval); return; }
+        if (videoEl.readyState < videoEl.HAVE_ENOUGH_DATA) return;
+
+        canvas.width = videoEl.videoWidth;
+        canvas.height = videoEl.videoHeight;
+        ctx.drawImage(videoEl, 0, 0);
+
+        if ('BarcodeDetector' in window) {
+          var det = new BarcodeDetector({ formats: ['qr_code'] });
+          det.detect(canvas).then(function(codes) {
+            if (codes.length > 0) {
+              clearInterval(interval);
+              procesarQRSync(codes[0].rawValue);
+            }
+          }).catch(function() {});
+        } else {
+          try {
+            var reader = new ZXing.BrowserQRCodeReader();
+            reader.decodeFromImage(undefined, canvas.toDataURL()).then(function(result) {
+              clearInterval(interval);
+              procesarQRSync(result.getText());
+            }).catch(function() {});
+          } catch(e) {}
+        }
+      }, 500);
+    }
+
+    function procesarQRSync(data) {
+      try {
+        var config = JSON.parse(data);
+        if (config.url && config.caja) {
+          API_URL = config.url;
+          CAJA = String(config.caja);
+          guardar();
+          cerrarSyncStream();
+          if (navigator.vibrate) navigator.vibrate([100, 50, 100]);
+          iniciarEscaneo();
+          return;
+        }
+      } catch(e) {}
+    }
+
+    function cerrarSyncStream() {
+      if (syncStream) { syncStream.getTracks().forEach(function(t) { t.stop(); }); syncStream = null; }
+    }
+
+    function cerrarSyncQR() {
+      cerrarSyncStream();
+      mostrar('syncScreen');
+    }
+
+    // ══════════════════════════════════════
+    //  ESCÁNER DE LIBROS (NUEVO MOTOR)
+    // ══════════════════════════════════════
+    function iniciarEscaneo() {
+      document.getElementById('badgeCaja').textContent = 'CAJA ' + CAJA;
+      mostrar('scanner');
       initDecoders();
-      comprobarEstado();
-    });
+      abrirCamara();
+    }
 
     function initDecoders() {
-      // Intentamos inicializar el motor nativo de Apple/Android si existe
       if ('BarcodeDetector' in window) {
-        try { 
-          nativeDetector = new BarcodeDetector({ 
-            formats: ['ean_13', 'ean_8', 'qr_code', 'code_128', 'upc_a', 'upc_e'] 
-          }); 
-        } catch(e) {}
+        try {
+          nativeDetector = new BarcodeDetector({ formats: ['ean_13', 'ean_8', 'qr_code', 'code_128'] });
+        } catch(e) { nativeDetector = null; }
       }
-    }
-
-    function comprobarEstado() {
-      const url = localStorage.getItem('apiUrl');
-      const caja = localStorage.getItem('cajaId');
-      if (url && caja) {
-        document.getElementById('caja-label').textContent = 'CAJA ' + caja;
-        document.getElementById('view-setup').classList.add('hidden');
-        document.getElementById('view-scanner').classList.remove('hidden');
-      } else {
-        document.getElementById('view-setup').classList.remove('hidden');
-        document.getElementById('view-scanner').classList.add('hidden');
-      }
-    }
-
-    function desvincular() {
-      localStorage.removeItem('apiUrl');
-      localStorage.removeItem('cajaId');
-      showNotif('Caja desvinculada', 'info', 'link_off');
-      comprobarEstado();
-    }
-
-    function showNotif(text, type, icon) {
-      const notif = document.getElementById('notification');
-      document.getElementById('notif-text').textContent = text;
-      document.getElementById('notif-icon').textContent = icon;
-      notif.className = 'visible ' + type;
-      setTimeout(() => notif.className = '', 3000);
-    }
-
-    async function abrirCamara(mode) {
-      currentMode = mode;
-      document.getElementById('camera-modal').classList.remove('hidden');
-      
-      const btn = document.getElementById('btn-capture');
-      btn.disabled = false;
-      btn.innerHTML = '<span class="material-symbols-outlined">center_focus_strong</span> ESCANEAR';
-      
-      const guide = document.getElementById('scan-guide');
-      const title = document.getElementById('camera-title');
-      
-      if (mode === 'qr') {
-        guide.className = 'scan-guide guide-qr';
-        title.textContent = 'Apunta al QR de la pantalla';
-      } else {
-        guide.className = 'scan-guide guide-barcode';
-        title.textContent = 'Apunta al código del libro';
-      }
-
       try {
-        // Pedimos cámara trasera de alta calidad si es posible
-        stream = await navigator.mediaDevices.getUserMedia({ 
-          video: { facingMode: "environment", width: { ideal: 1920 }, height: { ideal: 1080 } } 
+        zxingReader = new ZXing.MultiFormatReader();
+        var hints = new Map();
+        hints.set(ZXing.DecodeHintType.POSSIBLE_FORMATS, [
+          ZXing.BarcodeFormat.EAN_13, ZXing.BarcodeFormat.EAN_8, ZXing.BarcodeFormat.CODE_128
+        ]);
+        hints.set(ZXing.DecodeHintType.TRY_HARDER, true);
+        zxingReader.setHints(hints);
+      } catch(e) {}
+    }
+
+    function abrirCamara() {
+      var videoEl = document.getElementById('camera-stream');
+      // Forzamos la máxima calidad posible para que el código no salga borroso
+      navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment', width: { ideal: 1920 } } })
+        .then(function(mediaStream) {
+          stream = mediaStream;
+          videoEl.srcObject = mediaStream;
+          videoEl.setAttribute('playsinline', 'true');
+          videoEl.play();
+          setStatus('Apunta al código y pulsa ESCANEAR', 'ready', 'center_focus_strong');
+          document.getElementById('btnScan').disabled = false;
+        })
+        .catch(function(err) {
+          setStatus('Error de cámara: ' + err.message, 'error', 'no_photography');
+          document.getElementById('btnScan').disabled = true;
         });
-        const videoElement = document.getElementById('camera-stream');
-        videoElement.srcObject = stream;
-        videoElement.setAttribute('playsinline', true);
-        videoElement.play();
-      } catch (err) {
-        cerrarCamara();
-        showNotif('Permiso de cámara denegado', 'error', 'no_photography');
-      }
     }
 
     function cerrarCamara() {
-      if (stream) {
-        stream.getTracks().forEach(track => track.stop());
-        stream = null;
-      }
-      document.getElementById('camera-modal').classList.add('hidden');
+      if (stream) { stream.getTracks().forEach(function(t) { t.stop(); }); stream = null; }
     }
 
-    // ── GESTOR DE CAPTURA (Mini-Ráfaga) ──
-    async function iniciarCaptura() {
-      const videoEl = document.getElementById('camera-stream');
-      const btn = document.getElementById('btn-capture');
+    function setStatus(text, type, icon) {
+      document.getElementById('statusRow').className = 'status-row ' + (type || 'ready');
+      document.getElementById('statusIcon').textContent = icon || 'center_focus_strong';
+      document.getElementById('statusText').textContent = text;
+    }
 
-      if (!videoEl.videoWidth || videoEl.readyState < videoEl.HAVE_ENOUGH_DATA) return;
+    // ── NUEVO MOTOR DE RÁFAGA + RECORTE ──
+    async function escanear() {
+      var videoEl = document.getElementById('camera-stream');
+      var btn = document.getElementById('btnScan');
 
-      if (navigator.vibrate) navigator.vibrate(50);
+      if (!videoEl.videoWidth || videoEl.readyState < videoEl.HAVE_ENOUGH_DATA) {
+        setStatus('Cámara no lista', 'error', 'warning'); return;
+      }
+
       btn.disabled = true;
-      btn.innerHTML = '<span class="material-symbols-outlined">hourglass_empty</span> ANALIZANDO...';
+      setStatus('Analizando...', 'sending', 'search');
+      if (navigator.vibrate) navigator.vibrate(50);
 
       let codigoEncontrado = null;
 
-      // Hacemos hasta 4 intentos rápidos (por si el usuario movió la mano)
+      // Hacemos 4 "fotos" muy rápidas para asegurar que el código no esté movido
       for (let i = 0; i < 4; i++) {
         codigoEncontrado = await procesarUnFrame(videoEl);
         if (codigoEncontrado) break; 
-        
-        // Esperamos 100ms antes del siguiente intento de la ráfaga
         await new Promise(r => setTimeout(r, 100));
       }
 
-      if (codigoEncontrado) {
-        procesarFinal(codigoEncontrado);
+      if (codigoEncontrado && codigoEncontrado.length >= 8) {
+        enviarALaCaja(codigoEncontrado);
       } else {
-        showNotif('No se detectó código. Reintenta.', 'error', 'warning');
-        setTimeout(() => {
-          btn.disabled = false;
-          btn.innerHTML = '<span class="material-symbols-outlined">center_focus_strong</span> ESCANEAR';
-        }, 1500);
+        noDetectado();
       }
     }
 
-    // ── EL RECORTE INTELIGENTE Y ANÁLISIS ──
     async function procesarUnFrame(videoEl) {
-      const canvas = document.getElementById('scanCanvas');
-      const ctx = canvas.getContext('2d', { willReadFrequently: true });
+      var canvas = document.getElementById('scanCanvas');
+      var ctx = canvas.getContext('2d', { willReadFrequently: true });
 
-      const vw = videoEl.videoWidth;
-      const vh = videoEl.videoHeight;
-      let cropW, cropH;
+      var vw = videoEl.videoWidth;
+      var vh = videoEl.videoHeight;
 
-      // Definimos el tamaño del recorte basado en lo que estamos buscando
-      if (currentMode === 'qr') {
-        // Para QR recortamos un cuadrado central (60% de la pantalla)
-        cropW = Math.floor(Math.min(vw, vh) * 0.6);
-        cropH = cropW;
-      } else {
-        // Para código de barras recortamos un rectángulo central
-        cropW = Math.floor(vw * 0.8);
-        cropH = Math.floor(vh * 0.3);
-      }
-
-      const startX = Math.floor((vw - cropW) / 2);
-      const startY = Math.floor((vh - cropH) / 2);
+      // Recortamos solo el rectángulo donde apunta la línea roja (80% ancho, 30% alto)
+      var cropW = Math.floor(vw * 0.8);
+      var cropH = Math.floor(vh * 0.3);
+      var startX = Math.floor((vw - cropW) / 2);
+      var startY = Math.floor((vh - cropH) / 2);
 
       canvas.width = cropW;
       canvas.height = cropH;
 
-      // Dibujamos SOLO el recorte (Resolución 1:1, nada de emborronamientos)
+      // Dibujamos solo el recorte, a resolución original
       ctx.drawImage(videoEl, startX, startY, cropW, cropH, 0, 0, cropW, cropH);
 
-      const imageData = ctx.getImageData(0, 0, cropW, cropH);
-
-      // 1. Prioridad: Lector Nativo (Rapidísimo)
+      // 1. Motor nativo de Apple/Android
       if (nativeDetector) {
         try {
-          const barcodes = await nativeDetector.detect(canvas);
+          var barcodes = await nativeDetector.detect(canvas);
           if (barcodes.length > 0) return barcodes[0].rawValue;
         } catch(e) {}
       }
 
-      // 2. Especialista QR
-      if (currentMode === 'qr' && typeof jsQR !== 'undefined') {
-        const qrCode = jsQR(imageData.data, imageData.width, imageData.height, { inversionAttempts: "dontInvert" });
-        if (qrCode) return qrCode.data;
-      }
-
-      // 3. Especialista Códigos de Barras (El ZXing a prueba de fallos que creaste)
-      if (currentMode === 'barcode' && typeof ZXing !== 'undefined') {
+      // 2. Motor ZXing clásico por Luminancia
+      if (zxingReader) {
         try {
-          const len = imageData.data.length;
-          const lum = new Uint8ClampedArray(len / 4);
-          for (let i = 0; i < len; i += 4) {
+          var imageData = ctx.getImageData(0, 0, cropW, cropH);
+          var len = imageData.data.length;
+          var lum = new Uint8ClampedArray(len / 4);
+          for (var i = 0; i < len; i += 4) {
             lum[i / 4] = Math.round(imageData.data[i] * 0.299 + imageData.data[i+1] * 0.587 + imageData.data[i+2] * 0.114);
           }
-          const source = new ZXing.RGBLuminanceSource(lum, cropW, cropH);
-          const bitmap = new ZXing.BinaryBitmap(new ZXing.HybridBinarizer(source));
-          
-          const reader = new ZXing.MultiFormatReader();
-          const hints = new Map();
-          hints.set(ZXing.DecodeHintType.POSSIBLE_FORMATS, [
-            ZXing.BarcodeFormat.EAN_13, ZXing.BarcodeFormat.EAN_8, ZXing.BarcodeFormat.CODE_128
-          ]);
-          hints.set(ZXing.DecodeHintType.TRY_HARDER, true);
-          reader.setHints(hints);
-          
-          const result = reader.decode(bitmap);
+          var source = new ZXing.RGBLuminanceSource(lum, cropW, cropH);
+          var bitmap = new ZXing.BinaryBitmap(new ZXing.HybridBinarizer(source));
+          var result = zxingReader.decode(bitmap);
           return result.getText();
         } catch(e) {}
       }
-
       return null;
     }
 
-    // ── GESTIÓN DEL RESULTADO Y ENVÍO A GOOGLE ──
-    function procesarFinal(text) {
-      if (currentMode === 'qr') {
-        if (text.includes('"url"') && text.includes('"caja"')) {
-          try {
-            const config = JSON.parse(text);
-            if (config.url && config.caja) {
-              cerrarCamara();
-              if (navigator.vibrate) navigator.vibrate([100, 50, 100]);
-              localStorage.setItem('apiUrl', config.url);
-              localStorage.setItem('cajaId', config.caja);
-              showNotif('¡Caja ' + config.caja + ' vinculada!', 'success', 'check_circle');
-              comprobarEstado();
-            }
-          } catch(e) {}
-        }
-      } 
-      else if (currentMode === 'barcode') {
-        if (text.length >= 8 && !text.includes('"url"')) {
-          cerrarCamara();
-          if (navigator.vibrate) navigator.vibrate(100);
-          enviarALaCaja(text);
-        }
-      }
+    function noDetectado() {
+      setStatus('No se detectó código — reintenta', 'error', 'warning');
+      setTimeout(function() {
+        setStatus('Apunta al código y pulsa ESCANEAR', 'ready', 'center_focus_strong');
+        document.getElementById('btnScan').disabled = false;
+      }, 1500);
     }
 
-    async function enviarALaCaja(codigoLibro) {
-      const apiUrl = localStorage.getItem('apiUrl');
-      const caja = localStorage.getItem('cajaId');
-      
-      showNotif('Enviando libro...', 'info', 'wifi_tethering');
-
+    // ── RED (Intacta de tu código original) ──
+    async function enviarALaCaja(code) {
+      if (navigator.vibrate) navigator.vibrate(100);
+      setStatus('Enviando ' + code + '...', 'sending', 'wifi_tethering');
       try {
-        const sep = apiUrl.includes('?') ? '&' : '?';
-        const url = apiUrl + sep + 'page=api&action=setScannerCode&caja=' + encodeURIComponent(caja) + '&codigo=' + encodeURIComponent(codigoLibro);
-        
+        var sep = API_URL.includes('?') ? '&' : '?';
+        var url = API_URL + sep + 'page=api&action=setScannerCode&caja=' + encodeURIComponent(CAJA) + '&codigo=' + encodeURIComponent(code);
         await fetch(url, { mode: 'no-cors' });
-        
-        showNotif('¡Enviado! (' + codigoLibro + ')', 'success', 'check_circle');
-      } catch (err) {
-         showNotif('Fallo de conexión', 'error', 'cloud_off');
+        setStatus('Enviado ✓  ' + code, 'success', 'check_circle');
+        document.getElementById('lastCode').textContent = 'Último: ' + code;
+      } catch(e) {
+        setStatus('Error de red', 'error', 'error_outline');
       }
+      setTimeout(function() {
+        setStatus('Apunta al código y pulsa ESCANEAR', 'ready', 'center_focus_strong');
+        document.getElementById('btnScan').disabled = false;
+      }, 1500);
     }
+
+    cargar();
+    window.addEventListener('beforeunload', function() { cerrarCamara(); cerrarSyncStream(); });
   </script>
 </body>
 </html>
