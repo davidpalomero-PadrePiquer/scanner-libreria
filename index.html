@@ -21,7 +21,6 @@
     .connected-info strong { color: #69f0ae; }
     .btn-continue { background: #2e7d32; color: white; border: none; padding: 12px 28px; border-radius: 10px; font-size: 1rem; font-weight: bold; cursor: pointer; display: flex; align-items: center; gap: 8px; margin-top: 10px; }
 
-    /* Config manual */
     #manualConfig { display: none; width: 100%; max-width: 400px; padding: 16px; background: #1e1e1e; border-radius: 10px; }
     #manualConfig.visible { display: block; }
     #manualConfig label { display: block; font-size: 0.8rem; color: #aaa; margin: 8px 0 4px; }
@@ -31,30 +30,31 @@
 
     /* ── Pantalla QR Sync ── */
     #qrReader { display: none; flex: 1; flex-direction: column; }
-    #qrReader .header { background: #ff6f00; }
     #qrReaderContainer { flex: 1; position: relative; background: #000; overflow: hidden; }
     #qrReaderContainer video { width: 100%; height: 100%; object-fit: cover; }
     canvas { display: none; }
-    .qr-guide { position: absolute; top: 50%; left: 50%; transform: translate(-50%,-50%); width: 220px; height: 220px; border: 3px solid rgba(255,255,255,0.6); border-radius: 16px; pointer-events: none; z-index: 2; }
-    #qrStatus { padding: 16px; text-align: center; }
-    #qrStatus p { color: #aaa; font-size: 0.95rem; margin-bottom: 10px; }
-    .btn-cancel { background: rgba(255,255,255,0.15); color: #ccc; border: none; padding: 10px 20px; border-radius: 8px; font-size: 0.9rem; cursor: pointer; }
+    .qr-guide { position: absolute; top: 50%; left: 50%; transform: translate(-50%,-50%); width: 220px; height: 220px; border: 3px solid rgba(0,255,0,0.5); border-radius: 16px; pointer-events: none; z-index: 2; }
+    .qr-header { background: #1a237e; padding: 10px 16px; text-align: center; font-weight: bold; font-size: 0.95rem; display: flex; align-items: center; justify-content: center; gap: 8px; }
+
+    .btn-scan-big {
+      position: absolute; bottom: 20px; left: 50%; transform: translateX(-50%);
+      padding: 18px 50px; font-size: 22px; font-weight: bold;
+      color: white; border: none; border-radius: 14px;
+      cursor: pointer; z-index: 5; opacity: 0.85;
+      display: flex; align-items: center; gap: 10px;
+    }
+    .btn-scan-big:active { opacity: 1; }
+    .btn-scan-big:disabled { background: #555; opacity: 0.5; }
+
+    #qrStatusBar { padding: 12px; text-align: center; display: flex; flex-direction: column; align-items: center; gap: 8px; }
+    #qrStatusBar .status-row { display: flex; align-items: center; gap: 8px; font-weight: 600; font-size: 0.95rem; }
+    .btn-cancel { background: rgba(255,255,255,0.15); color: #ccc; border: none; padding: 8px 18px; border-radius: 8px; font-size: 0.85rem; cursor: pointer; }
 
     /* ── Pantalla ESCÁNER ── */
     #scanner { display: none; flex: 1; flex-direction: column; }
     #reader-container { flex: 1; position: relative; background: #000; overflow: hidden; }
     #camera-stream { width: 100%; height: 100%; object-fit: cover; }
     .scan-guide { position: absolute; top: 50%; left: 50%; transform: translate(-50%,-50%); width: 75%; max-width: 320px; height: 100px; border: 3px solid rgba(0,255,0,0.5); border-radius: 12px; pointer-events: none; z-index: 2; }
-
-    #btnScan {
-      position: absolute; bottom: 20px; left: 50%; transform: translateX(-50%);
-      padding: 18px 50px; font-size: 22px; font-weight: bold;
-      color: white; background: #2e7d32; border: none; border-radius: 14px;
-      cursor: pointer; z-index: 5; opacity: 0.85;
-      display: flex; align-items: center; gap: 10px;
-    }
-    #btnScan:active { background: #1b5e20; opacity: 1; }
-    #btnScan:disabled { background: #555; opacity: 0.5; }
 
     .status-bar { padding: 14px; text-align: center; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 8px; }
     .status-row { display: flex; align-items: center; gap: 8px; font-weight: 600; font-size: 1rem; }
@@ -107,19 +107,25 @@
   </div>
 
   <!-- ══════════════════════════════════════ -->
-  <!--  PANTALLA 2: LECTOR QR SINCRONIZACIÓN -->
+  <!--  PANTALLA 2: LECTOR QR VINCULACIÓN    -->
   <!-- ══════════════════════════════════════ -->
   <div id="qrReader">
-    <div class="header" style="background:#ff6f00;">
-      <span class="material-symbols-outlined">qr_code_2</span> Escanea el QR de la Caja
+    <div class="qr-header">
+      <span class="material-symbols-outlined">qr_code_2</span> Apunta al QR de la pantalla
     </div>
     <div id="qrReaderContainer">
       <video id="qrVideo" autoplay playsinline muted></video>
       <canvas id="qrCanvas"></canvas>
       <div class="qr-guide"></div>
+      <button class="btn-scan-big" style="background:#ff6f00;" id="btnSyncScan" onclick="escanearQRSync()">
+        <span class="material-symbols-outlined">center_focus_strong</span> ESCANEAR
+      </button>
     </div>
-    <div id="qrStatus">
-      <p>Apunta al código QR de la pantalla del ordenador</p>
+    <div id="qrStatusBar">
+      <div class="status-row ready" id="qrStatusRow">
+        <span class="material-symbols-outlined" id="qrStatusIcon">center_focus_strong</span>
+        <span id="qrStatusText">Apunta al QR y pulsa ESCANEAR</span>
+      </div>
       <button class="btn-cancel" onclick="cerrarSyncQR()">Cancelar</button>
     </div>
   </div>
@@ -137,7 +143,7 @@
       <video id="camera-stream" autoplay playsinline muted></video>
       <canvas id="scanCanvas"></canvas>
       <div class="scan-guide"></div>
-      <button id="btnScan" onclick="escanear()">
+      <button class="btn-scan-big" style="background:#2e7d32;" id="btnScan" onclick="escanear()">
         <span class="material-symbols-outlined">center_focus_strong</span> ESCANEAR
       </button>
     </div>
@@ -155,17 +161,13 @@
   </div>
 
   <script>
-    // ── ESTADO ──
     var API_URL = '';
     var CAJA = '1';
     var stream = null;
     var syncStream = null;
-    var syncInterval = null;
     var nativeDetector = null;
 
-    // ══════════════════════════════════════
-    //  PERSISTENCIA
-    // ══════════════════════════════════════
+    // ── Persistencia ──
     function guardar() {
       try { localStorage.setItem('scanner_url', API_URL); localStorage.setItem('scanner_caja', CAJA); } catch(e) {}
     }
@@ -183,18 +185,14 @@
       } catch(e) {}
     }
 
-    // ══════════════════════════════════════
-    //  NAVEGACIÓN
-    // ══════════════════════════════════════
+    // ── Navegación ──
     function mostrar(id) {
       ['syncScreen', 'qrReader', 'scanner'].forEach(function(s) {
         document.getElementById(s).style.display = 'none';
       });
       document.getElementById(id).style.display = 'flex';
     }
-
     function usarGuardada() { iniciarEscaneo(); }
-
     function conectarManual() {
       var url = document.getElementById('inputUrl').value.trim();
       var caja = document.getElementById('inputCaja').value.trim();
@@ -202,122 +200,145 @@
       API_URL = url; CAJA = caja || '1';
       guardar(); iniciarEscaneo();
     }
-
     function desconectar() { cerrarCamara(); mostrar('syncScreen'); }
     function toggleManual() { document.getElementById('manualConfig').classList.toggle('visible'); }
 
     // ══════════════════════════════════════
-    //  SYNC: Leer QR de la Caja
-    //  Usa BarcodeDetector nativo para QR
-    //  (funciona en Chrome, Safari, Edge)
+    //  DECODIFICAR CANVAS (doble motor)
+    // ══════════════════════════════════════
+    async function decodificarCanvas(canvas, formats) {
+      // 1. BarcodeDetector nativo
+      if ('BarcodeDetector' in window) {
+        try {
+          var det = new BarcodeDetector({ formats: formats });
+          var barcodes = await det.detect(canvas);
+          if (barcodes.length > 0) return barcodes[0].rawValue;
+        } catch(e) {}
+      }
+      // 2. ZXing bajo nivel
+      try {
+        var ctx = canvas.getContext('2d');
+        var imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+        var len = imageData.data.length;
+        var lum = new Uint8ClampedArray(len / 4);
+        for (var i = 0; i < len; i += 4) {
+          lum[i / 4] = Math.round(imageData.data[i] * 0.299 + imageData.data[i+1] * 0.587 + imageData.data[i+2] * 0.114);
+        }
+        var source = new ZXing.RGBLuminanceSource(lum, canvas.width, canvas.height);
+        var bitmap = new ZXing.BinaryBitmap(new ZXing.HybridBinarizer(source));
+        var reader = new ZXing.MultiFormatReader();
+        var hints = new Map();
+        // Mapear formatos nativos a ZXing
+        var zFormats = [];
+        if (formats.includes('qr_code')) zFormats.push(ZXing.BarcodeFormat.QR_CODE);
+        if (formats.includes('ean_13')) zFormats.push(ZXing.BarcodeFormat.EAN_13);
+        if (formats.includes('ean_8')) zFormats.push(ZXing.BarcodeFormat.EAN_8);
+        if (formats.includes('code_128')) zFormats.push(ZXing.BarcodeFormat.CODE_128);
+        if (formats.includes('upc_a')) zFormats.push(ZXing.BarcodeFormat.UPC_A);
+        if (formats.includes('upc_e')) zFormats.push(ZXing.BarcodeFormat.UPC_E);
+        if (zFormats.length === 0) zFormats.push(ZXing.BarcodeFormat.QR_CODE);
+        hints.set(ZXing.DecodeHintType.POSSIBLE_FORMATS, zFormats);
+        hints.set(ZXing.DecodeHintType.TRY_HARDER, true);
+        reader.setHints(hints);
+        var result = reader.decode(bitmap);
+        return result.getText();
+      } catch(e) {}
+      return null;
+    }
+
+    // ══════════════════════════════════════
+    //  PANTALLA 2: SYNC QR — con botón manual
     // ══════════════════════════════════════
     function abrirSyncQR() {
       mostrar('qrReader');
       var videoEl = document.getElementById('qrVideo');
+      setQRStatus('Apunta al QR y pulsa ESCANEAR', 'ready', 'center_focus_strong');
 
       navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } })
         .then(function(mediaStream) {
           syncStream = mediaStream;
           videoEl.srcObject = mediaStream;
           videoEl.play();
-          iniciarLecturaQR();
+          document.getElementById('btnSyncScan').disabled = false;
         })
         .catch(function(err) {
-          document.getElementById('qrStatus').innerHTML =
-            '<p style="color:#f44;">Error de cámara: ' + err.message + '</p>' +
-            '<button class="btn-cancel" onclick="cerrarSyncQR()">Volver</button>';
+          setQRStatus('Error de cámara: ' + err.message, 'error', 'no_photography');
+          document.getElementById('btnSyncScan').disabled = true;
         });
     }
 
-    function iniciarLecturaQR() {
-      var videoEl = document.getElementById('qrVideo');
-      var canvas = document.getElementById('qrCanvas');
-      var ctx = canvas.getContext('2d');
-
-      // Detectar si tenemos BarcodeDetector nativo para QR
-      var qrDetector = null;
-      if ('BarcodeDetector' in window) {
-        try { qrDetector = new BarcodeDetector({ formats: ['qr_code'] }); } catch(e) {}
-      }
-
-      syncInterval = setInterval(function() {
-        if (!syncStream) return;
-        if (videoEl.readyState < videoEl.HAVE_ENOUGH_DATA) return;
-
-        canvas.width = videoEl.videoWidth;
-        canvas.height = videoEl.videoHeight;
-        ctx.drawImage(videoEl, 0, 0);
-
-        if (qrDetector) {
-          // Nativo
-          qrDetector.detect(canvas).then(function(codes) {
-            if (codes.length > 0) procesarQRSync(codes[0].rawValue);
-          }).catch(function() {});
-        } else {
-          // Fallback ZXing bajo nivel
-          try {
-            var imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
-            var len = imageData.data.length;
-            var lum = new Uint8ClampedArray(len / 4);
-            for (var i = 0; i < len; i += 4) {
-              lum[i / 4] = Math.round(imageData.data[i] * 0.299 + imageData.data[i+1] * 0.587 + imageData.data[i+2] * 0.114);
-            }
-            var source = new ZXing.RGBLuminanceSource(lum, canvas.width, canvas.height);
-            var bitmap = new ZXing.BinaryBitmap(new ZXing.HybridBinarizer(source));
-            var reader = new ZXing.MultiFormatReader();
-            var hints = new Map();
-            hints.set(ZXing.DecodeHintType.POSSIBLE_FORMATS, [ZXing.BarcodeFormat.QR_CODE]);
-            reader.setHints(hints);
-            var result = reader.decode(bitmap);
-            procesarQRSync(result.getText());
-          } catch(e) {}
-        }
-      }, 400);
+    function setQRStatus(text, type, icon) {
+      document.getElementById('qrStatusRow').className = 'status-row ' + (type || 'ready');
+      document.getElementById('qrStatusIcon').textContent = icon || 'center_focus_strong';
+      document.getElementById('qrStatusText').textContent = text;
     }
 
-    function procesarQRSync(data) {
+    async function escanearQRSync() {
+      var videoEl = document.getElementById('qrVideo');
+      var canvas = document.getElementById('qrCanvas');
+      var btn = document.getElementById('btnSyncScan');
+
+      if (!videoEl.videoWidth || videoEl.readyState < videoEl.HAVE_ENOUGH_DATA) {
+        setQRStatus('Cámara no lista', 'error', 'warning'); return;
+      }
+
+      btn.disabled = true;
+      setQRStatus('Analizando...', 'sending', 'search');
+      if (navigator.vibrate) navigator.vibrate(50);
+
+      canvas.width = videoEl.videoWidth;
+      canvas.height = videoEl.videoHeight;
+      canvas.getContext('2d').drawImage(videoEl, 0, 0);
+
+      var timeout = new Promise(function(_, reject) {
+        setTimeout(function() { reject(new Error('Timeout')); }, 5000);
+      });
+
       try {
-        var config = JSON.parse(data);
-        if (config.url && config.caja) {
-          clearInterval(syncInterval); syncInterval = null;
-          API_URL = config.url;
-          CAJA = String(config.caja);
-          guardar();
-          cerrarSyncStream();
-          if (navigator.vibrate) navigator.vibrate([100, 50, 100]);
-          iniciarEscaneo();
+        var data = await Promise.race([decodificarCanvas(canvas, ['qr_code']), timeout]);
+
+        if (data) {
+          try {
+            var config = JSON.parse(data);
+            if (config.url && config.caja) {
+              API_URL = config.url;
+              CAJA = String(config.caja);
+              guardar();
+              cerrarSyncStream();
+              if (navigator.vibrate) navigator.vibrate([100, 50, 100]);
+              setQRStatus('Vinculado a Caja ' + CAJA + ' ✓', 'success', 'check_circle');
+              setTimeout(function() { iniciarEscaneo(); }, 800);
+              return;
+            }
+          } catch(e) {}
+          // QR leído pero no es JSON válido de vinculación
+          setQRStatus('QR no válido — usa el QR de la Caja', 'error', 'warning');
+        } else {
+          setQRStatus('No se detectó QR — reintenta', 'error', 'warning');
         }
       } catch(e) {
-        // No es JSON válido, seguir escaneando
+        setQRStatus('No se detectó QR — reintenta', 'error', 'warning');
       }
+
+      setTimeout(function() {
+        setQRStatus('Apunta al QR y pulsa ESCANEAR', 'ready', 'center_focus_strong');
+        btn.disabled = false;
+      }, 1500);
     }
 
     function cerrarSyncStream() {
-      if (syncInterval) { clearInterval(syncInterval); syncInterval = null; }
       if (syncStream) { syncStream.getTracks().forEach(function(t) { t.stop(); }); syncStream = null; }
     }
 
     function cerrarSyncQR() { cerrarSyncStream(); mostrar('syncScreen'); }
 
     // ══════════════════════════════════════
-    //  ESCÁNER DE LIBROS
+    //  PANTALLA 3: ESCÁNER DE LIBROS
     // ══════════════════════════════════════
     function iniciarEscaneo() {
       document.getElementById('badgeCaja').textContent = 'CAJA ' + CAJA;
       mostrar('scanner');
-      initDecoders();
       abrirCamara();
-    }
-
-    function initDecoders() {
-      nativeDetector = null;
-      if ('BarcodeDetector' in window) {
-        try {
-          nativeDetector = new BarcodeDetector({
-            formats: ['ean_13', 'ean_8', 'qr_code', 'code_128', 'upc_a', 'upc_e']
-          });
-        } catch(e) {}
-      }
     }
 
     function abrirCamara() {
@@ -347,42 +368,6 @@
       document.getElementById('statusText').textContent = text;
     }
 
-    // ── Decodificar canvas (doble motor) ──
-    async function decodificarCanvas(canvas) {
-      // 1. BarcodeDetector nativo
-      if (nativeDetector) {
-        try {
-          var barcodes = await nativeDetector.detect(canvas);
-          if (barcodes.length > 0) return barcodes[0].rawValue;
-        } catch(e) {}
-      }
-      // 2. ZXing bajo nivel
-      try {
-        var ctx = canvas.getContext('2d');
-        var imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
-        var len = imageData.data.length;
-        var lum = new Uint8ClampedArray(len / 4);
-        for (var i = 0; i < len; i += 4) {
-          lum[i / 4] = Math.round(imageData.data[i] * 0.299 + imageData.data[i+1] * 0.587 + imageData.data[i+2] * 0.114);
-        }
-        var source = new ZXing.RGBLuminanceSource(lum, canvas.width, canvas.height);
-        var bitmap = new ZXing.BinaryBitmap(new ZXing.HybridBinarizer(source));
-        var reader = new ZXing.MultiFormatReader();
-        var hints = new Map();
-        hints.set(ZXing.DecodeHintType.POSSIBLE_FORMATS, [
-          ZXing.BarcodeFormat.EAN_13, ZXing.BarcodeFormat.EAN_8,
-          ZXing.BarcodeFormat.QR_CODE, ZXing.BarcodeFormat.CODE_128,
-          ZXing.BarcodeFormat.UPC_A, ZXing.BarcodeFormat.UPC_E
-        ]);
-        hints.set(ZXing.DecodeHintType.TRY_HARDER, true);
-        reader.setHints(hints);
-        var result = reader.decode(bitmap);
-        return result.getText();
-      } catch(e) {}
-      return null;
-    }
-
-    // ── Escanear (botón manual) ──
     async function escanear() {
       var videoEl = document.getElementById('camera-stream');
       var canvas = document.getElementById('scanCanvas');
@@ -405,7 +390,10 @@
       });
 
       try {
-        var code = await Promise.race([decodificarCanvas(canvas), timeout]);
+        var code = await Promise.race([
+          decodificarCanvas(canvas, ['ean_13', 'ean_8', 'qr_code', 'code_128', 'upc_a', 'upc_e']),
+          timeout
+        ]);
         if (code && code.length >= 8) {
           enviarALaCaja(code);
         } else {
