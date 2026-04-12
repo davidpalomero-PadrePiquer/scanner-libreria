@@ -13,17 +13,11 @@
     .header { padding: 12px 16px; text-align: center; font-weight: bold; font-size: 1rem; display: flex; align-items: center; justify-content: center; gap: 8px; }
     .header-main { background: #1a237e; }
     .badge { background: #ff6f00; padding: 4px 12px; border-radius: 20px; font-size: 0.85rem; }
-
     .header-with-action { display: flex; align-items: center; justify-content: space-between; padding: 10px 12px; }
     .header-with-action .header-title { display: flex; align-items: center; gap: 8px; font-weight: bold; font-size: 1rem; }
-    .btn-header {
-      padding: 8px 16px; border: none; border-radius: 10px;
-      font-size: 0.85rem; font-weight: bold; cursor: pointer;
-      display: flex; align-items: center; gap: 6px;
-    }
+    .btn-header { padding: 8px 16px; border: none; border-radius: 10px; font-size: 0.85rem; font-weight: bold; cursor: pointer; display: flex; align-items: center; gap: 6px; }
     .btn-header-gray { background: rgba(255,255,255,0.25); color: white; }
     .btn-header-orange { background: rgba(255,165,0,0.7); color: white; }
-    .btn-header-gray:active, .btn-header-orange:active { opacity: 0.7; }
 
     #syncScreen { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 24px; gap: 16px; }
     #syncScreen h2 { font-size: 1.3rem; text-align: center; }
@@ -32,7 +26,6 @@
     .connected-info { background: #1b5e20; padding: 14px 20px; border-radius: 10px; text-align: center; font-size: 0.95rem; max-width: 350px; width: 100%; }
     .connected-info strong { color: #69f0ae; }
     .btn-continue { background: #2e7d32; color: white; border: none; padding: 12px 28px; border-radius: 10px; font-size: 1rem; font-weight: bold; cursor: pointer; display: flex; align-items: center; gap: 8px; margin-top: 10px; }
-
     #manualConfig { display: none; width: 100%; max-width: 400px; padding: 16px; background: #1e1e1e; border-radius: 10px; }
     #manualConfig.visible { display: block; }
     #manualConfig label { display: block; font-size: 0.8rem; color: #aaa; margin: 8px 0 4px; }
@@ -48,7 +41,7 @@
     canvas { display: none; }
 
     .guide-qr { position: absolute; top: 50%; left: 50%; transform: translate(-50%,-50%); width: 220px; height: 220px; border: 3px solid rgba(0,255,0,0.5); border-radius: 16px; pointer-events: none; z-index: 2; transition: border-color 0.2s; }
-    .guide-barcode { position: absolute; top: 50%; left: 50%; transform: translate(-50%,-50%); width: 75%; max-width: 320px; height: 100px; border: 3px solid rgba(0,255,0,0.5); border-radius: 12px; pointer-events: none; z-index: 2; transition: border-color 0.2s; }
+    .guide-barcode { position: absolute; top: 50%; left: 50%; transform: translate(-50%,-50%); width: 80%; max-width: 340px; height: 120px; border: 3px solid rgba(0,255,0,0.5); border-radius: 12px; pointer-events: none; z-index: 2; transition: border-color 0.2s; }
     .guide-scanning { border-color: rgba(255,235,59,0.8) !important; }
 
     .btn-scan-big {
@@ -69,9 +62,8 @@
     .status-row.ready { color: #b0bec5; }
     .last-code { font-size: 0.85rem; color: #888; }
 
-    /* Barra de progreso de ráfaga */
     .burst-bar { position: absolute; bottom: 90px; left: 50%; transform: translateX(-50%); width: 60%; max-width: 280px; height: 6px; background: rgba(255,255,255,0.15); border-radius: 3px; z-index: 6; display: none; }
-    .burst-bar-fill { height: 100%; background: #ffeb3b; border-radius: 3px; width: 0%; transition: width 0.15s linear; }
+    .burst-bar-fill { height: 100%; background: #ffeb3b; border-radius: 3px; width: 0%; transition: width 0.12s linear; }
   </style>
 </head>
 <body>
@@ -80,7 +72,6 @@
   <div id="syncScreen">
     <span class="material-symbols-outlined" style="font-size:64px; color:#ff6f00;">qr_code_scanner</span>
     <h2>Escáner Móvil</h2>
-
     <div class="connected-info" id="savedInfo" style="display:none;">
       <span class="material-symbols-outlined" style="font-size:18px; vertical-align:middle;">link</span>
       Última conexión: <strong id="savedCajaLabel">Caja 1</strong>
@@ -89,20 +80,16 @@
         <span class="material-symbols-outlined">play_arrow</span> Continuar
       </button>
     </div>
-
     <p style="color:#aaa; text-align:center; max-width:320px; font-size:0.9rem;">
       Escanea el código QR que aparece en la pantalla de la Caja para vincular este móvil.
     </p>
-
     <button class="btn-sync" onclick="abrirSyncQR()">
       <span class="material-symbols-outlined">qr_code_2</span> Sincronizar con Caja
     </button>
-
     <button class="btn-manual" onclick="toggleManual()">
       <span class="material-symbols-outlined" style="font-size:16px; vertical-align:middle;">edit</span>
       Configurar manualmente
     </button>
-
     <div id="manualConfig">
       <label>URL del sistema (Apps Script)</label>
       <input type="url" id="inputUrl" placeholder="https://script.google.com/macros/s/.../exec" />
@@ -119,13 +106,14 @@
         <span class="material-symbols-outlined" style="font-size:18px;">arrow_back</span> Cancelar
       </button>
       <div class="header-title">
-        <span class="material-symbols-outlined">qr_code_2</span> Apunta al QR de la pantalla
+        <span class="material-symbols-outlined">qr_code_2</span> Apunta al QR
       </div>
       <div style="width:90px;"></div>
     </div>
-    <div class="camera-area" id="qrCameraArea">
+    <div class="camera-area">
       <video id="qrVideo" autoplay playsinline muted></video>
       <canvas id="qrCanvas"></canvas>
+      <canvas id="qrCropCanvas"></canvas>
       <div class="guide-qr" id="guideQR"></div>
       <div class="burst-bar" id="qrBurstBar"><div class="burst-bar-fill" id="qrBurstFill"></div></div>
       <button class="btn-scan-big" style="background:rgba(255,165,0,0.85);" id="btnSyncScan" onclick="escanearQRSync()">
@@ -151,9 +139,10 @@
       </div>
       <span class="badge" id="badgeCaja">CAJA 1</span>
     </div>
-    <div class="camera-area" id="scanCameraArea">
+    <div class="camera-area">
       <video id="camera-stream" autoplay playsinline muted></video>
       <canvas id="scanCanvas"></canvas>
+      <canvas id="scanCropCanvas"></canvas>
       <div class="guide-barcode" id="guideBarcode"></div>
       <div class="burst-bar" id="scanBurstBar"><div class="burst-bar-fill" id="scanBurstFill"></div></div>
       <button class="btn-scan-big" style="background:rgba(46,125,50,0.85);" id="btnScan" onclick="escanear()">
@@ -175,49 +164,87 @@
     var stream = null;
     var syncStream = null;
 
-    // ── Configuración de ráfaga ──
-    var BURST_FRAMES = 10;        // Número de capturas por ráfaga
-    var BURST_INTERVAL_MS = 150;  // ms entre cada captura (total ~1.5s)
+    // Ráfaga: 12 frames × 150ms = ~1.8s
+    var BURST_FRAMES = 12;
+    var BURST_INTERVAL_MS = 150;
 
     // ── Persistencia ──
-    function guardar() {
-      try { localStorage.setItem('scanner_url', API_URL); localStorage.setItem('scanner_caja', CAJA); } catch(e) {}
-    }
+    function guardar() { try { localStorage.setItem('scanner_url', API_URL); localStorage.setItem('scanner_caja', CAJA); } catch(e) {} }
     function cargar() {
       try {
-        var u = localStorage.getItem('scanner_url');
-        var c = localStorage.getItem('scanner_caja');
-        if (u && c) {
-          API_URL = u; CAJA = c;
-          document.getElementById('inputUrl').value = u;
-          document.getElementById('inputCaja').value = c;
-          document.getElementById('savedCajaLabel').textContent = 'Caja ' + c;
-          document.getElementById('savedInfo').style.display = 'block';
-        }
+        var u = localStorage.getItem('scanner_url'), c = localStorage.getItem('scanner_caja');
+        if (u && c) { API_URL = u; CAJA = c; document.getElementById('inputUrl').value = u; document.getElementById('inputCaja').value = c; document.getElementById('savedCajaLabel').textContent = 'Caja ' + c; document.getElementById('savedInfo').style.display = 'block'; }
       } catch(e) {}
     }
 
     // ── Navegación ──
-    function mostrar(id) {
-      ['syncScreen', 'qrReader', 'scanner'].forEach(function(s) {
-        document.getElementById(s).style.display = 'none';
-      });
-      document.getElementById(id).style.display = 'flex';
-    }
+    function mostrar(id) { ['syncScreen','qrReader','scanner'].forEach(function(s){document.getElementById(s).style.display='none';}); document.getElementById(id).style.display='flex'; }
     function usarGuardada() { iniciarEscaneo(); }
-    function conectarManual() {
-      var url = document.getElementById('inputUrl').value.trim();
-      var caja = document.getElementById('inputCaja').value.trim();
-      if (!url || !url.includes('script.google.com')) { alert('URL no válida'); return; }
-      API_URL = url; CAJA = caja || '1';
-      guardar(); iniciarEscaneo();
-    }
+    function conectarManual() { var url=document.getElementById('inputUrl').value.trim(), caja=document.getElementById('inputCaja').value.trim(); if(!url||!url.includes('script.google.com')){alert('URL no válida');return;} API_URL=url; CAJA=caja||'1'; guardar(); iniciarEscaneo(); }
     function desconectar() { cerrarCamara(); mostrar('syncScreen'); }
     function toggleManual() { document.getElementById('manualConfig').classList.toggle('visible'); }
 
-    // ══════════════════════════════════════════════════
+    // ══════════════════════════════════════════════════════
+    //  ABRIR CÁMARA EN HD
+    //  Pedimos la mayor resolución posible para que los
+    //  códigos de barras tengan más píxeles al recortar
+    // ══════════════════════════════════════════════════════
+    function abrirCamaraHD(videoEl) {
+      return navigator.mediaDevices.getUserMedia({
+        video: {
+          facingMode: 'environment',
+          width:  { ideal: 1920 },
+          height: { ideal: 1080 }
+        }
+      }).then(function(mediaStream) {
+        videoEl.srcObject = mediaStream;
+        videoEl.setAttribute('playsinline', 'true');
+        videoEl.play();
+        return mediaStream;
+      });
+    }
+
+    // ══════════════════════════════════════════════════════
+    //  RECORTAR CANVAS al centro (zona de la guía)
+    //  cropType: 'qr' (cuadrado central 50%)
+    //            'barcode' (rectángulo central 80% × 30%)
+    //            'full' (sin recortar)
+    // ══════════════════════════════════════════════════════
+    function capturarFrame(videoEl, fullCanvas, cropCanvas, cropType) {
+      var vw = videoEl.videoWidth, vh = videoEl.videoHeight;
+      var ctx = fullCanvas.getContext('2d');
+      fullCanvas.width = vw;
+      fullCanvas.height = vh;
+      ctx.drawImage(videoEl, 0, 0, vw, vh);
+
+      if (cropType === 'full') return fullCanvas;
+
+      var cx, cy, cw, ch;
+      if (cropType === 'qr') {
+        // Cuadrado central ~55% del ancho
+        var size = Math.min(vw, vh) * 0.55;
+        cx = (vw - size) / 2;
+        cy = (vh - size) / 2;
+        cw = size;
+        ch = size;
+      } else {
+        // Rectángulo central para código de barras: 85% ancho × 35% alto
+        cw = vw * 0.85;
+        ch = vh * 0.35;
+        cx = (vw - cw) / 2;
+        cy = (vh - ch) / 2;
+      }
+
+      cropCanvas.width = cw;
+      cropCanvas.height = ch;
+      var cropCtx = cropCanvas.getContext('2d');
+      cropCtx.drawImage(fullCanvas, cx, cy, cw, ch, 0, 0, cw, ch);
+      return cropCanvas;
+    }
+
+    // ══════════════════════════════════════════════════════
     //  DECODIFICAR CANVAS (doble motor)
-    // ══════════════════════════════════════════════════
+    // ══════════════════════════════════════════════════════
     async function decodificarCanvas(canvas, formats) {
       // 1. BarcodeDetector nativo
       if ('BarcodeDetector' in window) {
@@ -234,36 +261,36 @@
         var len = imageData.data.length;
         var lum = new Uint8ClampedArray(len / 4);
         for (var i = 0; i < len; i += 4) {
-          lum[i / 4] = Math.round(imageData.data[i] * 0.299 + imageData.data[i+1] * 0.587 + imageData.data[i+2] * 0.114);
+          lum[i/4] = Math.round(imageData.data[i]*0.299 + imageData.data[i+1]*0.587 + imageData.data[i+2]*0.114);
         }
         var source = new ZXing.RGBLuminanceSource(lum, canvas.width, canvas.height);
         var bitmap = new ZXing.BinaryBitmap(new ZXing.HybridBinarizer(source));
         var reader = new ZXing.MultiFormatReader();
         var hints = new Map();
-        var zFormats = [];
-        if (formats.includes('qr_code')) zFormats.push(ZXing.BarcodeFormat.QR_CODE);
-        if (formats.includes('ean_13')) zFormats.push(ZXing.BarcodeFormat.EAN_13);
-        if (formats.includes('ean_8')) zFormats.push(ZXing.BarcodeFormat.EAN_8);
-        if (formats.includes('code_128')) zFormats.push(ZXing.BarcodeFormat.CODE_128);
-        if (formats.includes('upc_a')) zFormats.push(ZXing.BarcodeFormat.UPC_A);
-        if (formats.includes('upc_e')) zFormats.push(ZXing.BarcodeFormat.UPC_E);
-        if (zFormats.length === 0) zFormats.push(ZXing.BarcodeFormat.QR_CODE);
-        hints.set(ZXing.DecodeHintType.POSSIBLE_FORMATS, zFormats);
+        var zf = [];
+        if (formats.includes('qr_code'))  zf.push(ZXing.BarcodeFormat.QR_CODE);
+        if (formats.includes('ean_13'))   zf.push(ZXing.BarcodeFormat.EAN_13);
+        if (formats.includes('ean_8'))    zf.push(ZXing.BarcodeFormat.EAN_8);
+        if (formats.includes('code_128')) zf.push(ZXing.BarcodeFormat.CODE_128);
+        if (formats.includes('upc_a'))    zf.push(ZXing.BarcodeFormat.UPC_A);
+        if (formats.includes('upc_e'))    zf.push(ZXing.BarcodeFormat.UPC_E);
+        if (zf.length === 0) zf.push(ZXing.BarcodeFormat.QR_CODE);
+        hints.set(ZXing.DecodeHintType.POSSIBLE_FORMATS, zf);
         hints.set(ZXing.DecodeHintType.TRY_HARDER, true);
         reader.setHints(hints);
-        var result = reader.decode(bitmap);
-        return result.getText();
+        return reader.decode(bitmap).getText();
       } catch(e) {}
       return null;
     }
 
-    // ══════════════════════════════════════════════════
-    //  RÁFAGA: captura N frames y decodifica cada uno
+    // ══════════════════════════════════════════════════════
+    //  RÁFAGA CON RECORTE ALTERNADO
+    //  Frame par  → recorte centrado (zona de la guía)
+    //  Frame impar → frame completo (por si el código está fuera)
     //  Se detiene en cuanto uno devuelve resultado
-    // ══════════════════════════════════════════════════
-    function burstScan(videoEl, canvas, formats, barEl, fillEl, guideEl) {
+    // ══════════════════════════════════════════════════════
+    function burstScan(videoEl, fullCanvas, cropCanvas, formats, cropType, barEl, fillEl, guideEl) {
       return new Promise(function(resolve) {
-        var ctx = canvas.getContext('2d');
         var frame = 0;
         var found = false;
 
@@ -275,17 +302,13 @@
           if (found) return;
           frame++;
 
-          // Actualizar barra de progreso
-          var pct = Math.round((frame / BURST_FRAMES) * 100);
-          fillEl.style.width = pct + '%';
+          fillEl.style.width = Math.round((frame / BURST_FRAMES) * 100) + '%';
 
-          // Capturar frame
-          canvas.width = videoEl.videoWidth;
-          canvas.height = videoEl.videoHeight;
-          ctx.drawImage(videoEl, 0, 0);
+          // Alternar: par = recorte centrado, impar = completo
+          var useCrop = (frame % 2 === 0) ? cropType : 'full';
+          var targetCanvas = capturarFrame(videoEl, fullCanvas, cropCanvas, useCrop);
 
-          // Intentar decodificar este frame
-          decodificarCanvas(canvas, formats).then(function(code) {
+          decodificarCanvas(targetCanvas, formats).then(function(code) {
             if (code && code.length >= 4 && !found) {
               found = true;
               clearInterval(interval);
@@ -296,17 +319,15 @@
             }
           });
 
-          // Si llegamos al final de la ráfaga sin resultado
           if (frame >= BURST_FRAMES) {
             clearInterval(interval);
-            // Esperar un poco por si el último frame aún se está procesando
             setTimeout(function() {
               if (!found) {
                 barEl.style.display = 'none';
                 if (guideEl) guideEl.classList.remove('guide-scanning');
                 resolve(null);
               }
-            }, 500);
+            }, 600);
           }
         }, BURST_INTERVAL_MS);
       });
@@ -320,11 +341,9 @@
       var videoEl = document.getElementById('qrVideo');
       setQRStatus('Apunta al QR y pulsa ESCANEAR', 'ready', 'center_focus_strong');
 
-      navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } })
-        .then(function(mediaStream) {
-          syncStream = mediaStream;
-          videoEl.srcObject = mediaStream;
-          videoEl.play();
+      abrirCamaraHD(videoEl)
+        .then(function(ms) {
+          syncStream = ms;
           document.getElementById('btnSyncScan').disabled = false;
         })
         .catch(function(err) {
@@ -341,7 +360,6 @@
 
     async function escanearQRSync() {
       var videoEl = document.getElementById('qrVideo');
-      var canvas = document.getElementById('qrCanvas');
       var btn = document.getElementById('btnSyncScan');
 
       if (!videoEl.videoWidth || videoEl.readyState < videoEl.HAVE_ENOUGH_DATA) {
@@ -353,7 +371,10 @@
       if (navigator.vibrate) navigator.vibrate(50);
 
       var data = await burstScan(
-        videoEl, canvas, ['qr_code'],
+        videoEl,
+        document.getElementById('qrCanvas'),
+        document.getElementById('qrCropCanvas'),
+        ['qr_code'], 'qr',
         document.getElementById('qrBurstBar'),
         document.getElementById('qrBurstFill'),
         document.getElementById('guideQR')
@@ -373,9 +394,9 @@
             return;
           }
         } catch(e) {}
-        setQRStatus('QR no válido — usa el QR de la Caja', 'error', 'warning');
+        setQRStatus('QR no válido — usa el de la Caja', 'error', 'warning');
       } else {
-        setQRStatus('No se detectó QR — reintenta', 'error', 'warning');
+        setQRStatus('No se detectó QR — acerca más', 'error', 'warning');
       }
 
       setTimeout(function() {
@@ -384,9 +405,7 @@
       }, 1500);
     }
 
-    function cerrarSyncStream() {
-      if (syncStream) { syncStream.getTracks().forEach(function(t) { t.stop(); }); syncStream = null; }
-    }
+    function cerrarSyncStream() { if (syncStream) { syncStream.getTracks().forEach(function(t){t.stop();}); syncStream = null; } }
     function cerrarSyncQR() { cerrarSyncStream(); mostrar('syncScreen'); }
 
     // ══════════════════════════════════════
@@ -395,17 +414,14 @@
     function iniciarEscaneo() {
       document.getElementById('badgeCaja').textContent = 'CAJA ' + CAJA;
       mostrar('scanner');
-      abrirCamara();
+      abrirCamaraLibros();
     }
 
-    function abrirCamara() {
+    function abrirCamaraLibros() {
       var videoEl = document.getElementById('camera-stream');
-      navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } })
-        .then(function(mediaStream) {
-          stream = mediaStream;
-          videoEl.srcObject = mediaStream;
-          videoEl.setAttribute('playsinline', 'true');
-          videoEl.play();
+      abrirCamaraHD(videoEl)
+        .then(function(ms) {
+          stream = ms;
           setStatus('Apunta al código y pulsa ESCANEAR', 'ready', 'center_focus_strong');
           document.getElementById('btnScan').disabled = false;
         })
@@ -415,9 +431,7 @@
         });
     }
 
-    function cerrarCamara() {
-      if (stream) { stream.getTracks().forEach(function(t) { t.stop(); }); stream = null; }
-    }
+    function cerrarCamara() { if (stream) { stream.getTracks().forEach(function(t){t.stop();}); stream = null; } }
 
     function setStatus(text, type, icon) {
       document.getElementById('statusRow').className = 'status-row ' + (type || 'ready');
@@ -427,7 +441,6 @@
 
     async function escanear() {
       var videoEl = document.getElementById('camera-stream');
-      var canvas = document.getElementById('scanCanvas');
       var btn = document.getElementById('btnScan');
 
       if (!videoEl.videoWidth || videoEl.readyState < videoEl.HAVE_ENOUGH_DATA) {
@@ -439,8 +452,10 @@
       if (navigator.vibrate) navigator.vibrate(50);
 
       var code = await burstScan(
-        videoEl, canvas,
-        ['ean_13', 'ean_8', 'qr_code', 'code_128', 'upc_a', 'upc_e'],
+        videoEl,
+        document.getElementById('scanCanvas'),
+        document.getElementById('scanCropCanvas'),
+        ['ean_13', 'ean_8', 'qr_code', 'code_128', 'upc_a', 'upc_e'], 'barcode',
         document.getElementById('scanBurstBar'),
         document.getElementById('scanBurstFill'),
         document.getElementById('guideBarcode')
@@ -449,16 +464,12 @@
       if (code && code.length >= 8) {
         enviarALaCaja(code);
       } else {
-        noDetectado();
+        setStatus('No se detectó código — acerca más', 'error', 'warning');
+        setTimeout(function() {
+          setStatus('Apunta al código y pulsa ESCANEAR', 'ready', 'center_focus_strong');
+          btn.disabled = false;
+        }, 1500);
       }
-    }
-
-    function noDetectado() {
-      setStatus('No se detectó código — reintenta', 'error', 'warning');
-      setTimeout(function() {
-        setStatus('Apunta al código y pulsa ESCANEAR', 'ready', 'center_focus_strong');
-        document.getElementById('btnScan').disabled = false;
-      }, 1500);
     }
 
     async function enviarALaCaja(code) {
