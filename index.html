@@ -57,10 +57,12 @@
     .status-bar { padding: 12px; text-align: center; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 6px; }
     .status-row { display: flex; align-items: center; gap: 8px; font-weight: 600; font-size: 0.95rem; }
     .status-row.success { color: #4caf50; }
-    .status-row.sending { color: #ffeb3b; }
+    .status-row.sending { color: #42a5f5; }
+    .status-row.scanning { color: #ffeb3b; }
     .status-row.error { color: #f44336; }
     .status-row.ready { color: #b0bec5; }
     .last-code { font-size: 0.85rem; color: #888; }
+    .code-number { font-family: 'Courier New', monospace; font-size: 1.05rem; letter-spacing: 1px; }
 
     .burst-bar { position: absolute; bottom: 90px; left: 50%; transform: translateX(-50%); width: 60%; max-width: 280px; height: 6px; background: rgba(255,255,255,0.15); border-radius: 3px; z-index: 6; display: none; }
     .burst-bar-fill { height: 100%; background: #ffeb3b; border-radius: 3px; width: 0%; transition: width 0.12s linear; }
@@ -159,178 +161,102 @@
   </div>
 
   <script>
-    var API_URL = '';
-    var CAJA = '1';
-    var stream = null;
-    var syncStream = null;
+    var API_URL = '', CAJA = '1', stream = null, syncStream = null;
+    var BURST_FRAMES = 12, BURST_INTERVAL_MS = 150;
 
-    // Ráfaga: 12 frames × 150ms = ~1.8s
-    var BURST_FRAMES = 12;
-    var BURST_INTERVAL_MS = 150;
-
-    // ── Persistencia ──
     function guardar() { try { localStorage.setItem('scanner_url', API_URL); localStorage.setItem('scanner_caja', CAJA); } catch(e) {} }
     function cargar() {
-      try {
-        var u = localStorage.getItem('scanner_url'), c = localStorage.getItem('scanner_caja');
+      try { var u = localStorage.getItem('scanner_url'), c = localStorage.getItem('scanner_caja');
         if (u && c) { API_URL = u; CAJA = c; document.getElementById('inputUrl').value = u; document.getElementById('inputCaja').value = c; document.getElementById('savedCajaLabel').textContent = 'Caja ' + c; document.getElementById('savedInfo').style.display = 'block'; }
       } catch(e) {}
     }
 
-    // ── Navegación ──
     function mostrar(id) { ['syncScreen','qrReader','scanner'].forEach(function(s){document.getElementById(s).style.display='none';}); document.getElementById(id).style.display='flex'; }
     function usarGuardada() { iniciarEscaneo(); }
     function conectarManual() { var url=document.getElementById('inputUrl').value.trim(), caja=document.getElementById('inputCaja').value.trim(); if(!url||!url.includes('script.google.com')){alert('URL no válida');return;} API_URL=url; CAJA=caja||'1'; guardar(); iniciarEscaneo(); }
     function desconectar() { cerrarCamara(); mostrar('syncScreen'); }
     function toggleManual() { document.getElementById('manualConfig').classList.toggle('visible'); }
 
-    // ══════════════════════════════════════════════════════
-    //  ABRIR CÁMARA EN HD
-    //  Pedimos la mayor resolución posible para que los
-    //  códigos de barras tengan más píxeles al recortar
-    // ══════════════════════════════════════════════════════
+    // ── Cámara HD ──
     function abrirCamaraHD(videoEl) {
-      return navigator.mediaDevices.getUserMedia({
-        video: {
-          facingMode: 'environment',
-          width:  { ideal: 1920 },
-          height: { ideal: 1080 }
-        }
-      }).then(function(mediaStream) {
-        videoEl.srcObject = mediaStream;
-        videoEl.setAttribute('playsinline', 'true');
-        videoEl.play();
-        return mediaStream;
-      });
+      return navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment', width: { ideal: 1920 }, height: { ideal: 1080 } } })
+        .then(function(ms) { videoEl.srcObject = ms; videoEl.setAttribute('playsinline','true'); videoEl.play(); return ms; });
     }
 
-    // ══════════════════════════════════════════════════════
-    //  RECORTAR CANVAS al centro (zona de la guía)
-    //  cropType: 'qr' (cuadrado central 50%)
-    //            'barcode' (rectángulo central 80% × 30%)
-    //            'full' (sin recortar)
-    // ══════════════════════════════════════════════════════
+    // ── Recorte centrado ──
     function capturarFrame(videoEl, fullCanvas, cropCanvas, cropType) {
       var vw = videoEl.videoWidth, vh = videoEl.videoHeight;
-      var ctx = fullCanvas.getContext('2d');
-      fullCanvas.width = vw;
-      fullCanvas.height = vh;
-      ctx.drawImage(videoEl, 0, 0, vw, vh);
-
+      fullCanvas.width = vw; fullCanvas.height = vh;
+      fullCanvas.getContext('2d').drawImage(videoEl, 0, 0, vw, vh);
       if (cropType === 'full') return fullCanvas;
-
       var cx, cy, cw, ch;
-      if (cropType === 'qr') {
-        // Cuadrado central ~55% del ancho
-        var size = Math.min(vw, vh) * 0.55;
-        cx = (vw - size) / 2;
-        cy = (vh - size) / 2;
-        cw = size;
-        ch = size;
-      } else {
-        // Rectángulo central para código de barras: 85% ancho × 35% alto
-        cw = vw * 0.85;
-        ch = vh * 0.35;
-        cx = (vw - cw) / 2;
-        cy = (vh - ch) / 2;
-      }
-
-      cropCanvas.width = cw;
-      cropCanvas.height = ch;
-      var cropCtx = cropCanvas.getContext('2d');
-      cropCtx.drawImage(fullCanvas, cx, cy, cw, ch, 0, 0, cw, ch);
+      if (cropType === 'qr') { var s = Math.min(vw,vh)*0.55; cx=(vw-s)/2; cy=(vh-s)/2; cw=s; ch=s; }
+      else { cw=vw*0.85; ch=vh*0.35; cx=(vw-cw)/2; cy=(vh-ch)/2; }
+      cropCanvas.width = cw; cropCanvas.height = ch;
+      cropCanvas.getContext('2d').drawImage(fullCanvas, cx, cy, cw, ch, 0, 0, cw, ch);
       return cropCanvas;
     }
 
-    // ══════════════════════════════════════════════════════
-    //  DECODIFICAR CANVAS (doble motor)
-    // ══════════════════════════════════════════════════════
+    // ── Decodificar ──
     async function decodificarCanvas(canvas, formats) {
-      // 1. BarcodeDetector nativo
       if ('BarcodeDetector' in window) {
-        try {
-          var det = new BarcodeDetector({ formats: formats });
-          var barcodes = await det.detect(canvas);
-          if (barcodes.length > 0) return barcodes[0].rawValue;
-        } catch(e) {}
+        try { var b = await new BarcodeDetector({formats:formats}).detect(canvas); if(b.length>0) return b[0].rawValue; } catch(e) {}
       }
-      // 2. ZXing bajo nivel
       try {
-        var ctx = canvas.getContext('2d');
-        var imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
-        var len = imageData.data.length;
-        var lum = new Uint8ClampedArray(len / 4);
-        for (var i = 0; i < len; i += 4) {
-          lum[i/4] = Math.round(imageData.data[i]*0.299 + imageData.data[i+1]*0.587 + imageData.data[i+2]*0.114);
-        }
-        var source = new ZXing.RGBLuminanceSource(lum, canvas.width, canvas.height);
-        var bitmap = new ZXing.BinaryBitmap(new ZXing.HybridBinarizer(source));
-        var reader = new ZXing.MultiFormatReader();
-        var hints = new Map();
-        var zf = [];
-        if (formats.includes('qr_code'))  zf.push(ZXing.BarcodeFormat.QR_CODE);
-        if (formats.includes('ean_13'))   zf.push(ZXing.BarcodeFormat.EAN_13);
-        if (formats.includes('ean_8'))    zf.push(ZXing.BarcodeFormat.EAN_8);
-        if (formats.includes('code_128')) zf.push(ZXing.BarcodeFormat.CODE_128);
-        if (formats.includes('upc_a'))    zf.push(ZXing.BarcodeFormat.UPC_A);
-        if (formats.includes('upc_e'))    zf.push(ZXing.BarcodeFormat.UPC_E);
-        if (zf.length === 0) zf.push(ZXing.BarcodeFormat.QR_CODE);
-        hints.set(ZXing.DecodeHintType.POSSIBLE_FORMATS, zf);
-        hints.set(ZXing.DecodeHintType.TRY_HARDER, true);
-        reader.setHints(hints);
-        return reader.decode(bitmap).getText();
+        var ctx=canvas.getContext('2d'), id=ctx.getImageData(0,0,canvas.width,canvas.height), len=id.data.length, lum=new Uint8ClampedArray(len/4);
+        for(var i=0;i<len;i+=4) lum[i/4]=Math.round(id.data[i]*0.299+id.data[i+1]*0.587+id.data[i+2]*0.114);
+        var src=new ZXing.RGBLuminanceSource(lum,canvas.width,canvas.height), bmp=new ZXing.BinaryBitmap(new ZXing.HybridBinarizer(src)), r=new ZXing.MultiFormatReader(), h=new Map(), zf=[];
+        if(formats.includes('qr_code'))zf.push(ZXing.BarcodeFormat.QR_CODE); if(formats.includes('ean_13'))zf.push(ZXing.BarcodeFormat.EAN_13);
+        if(formats.includes('ean_8'))zf.push(ZXing.BarcodeFormat.EAN_8); if(formats.includes('code_128'))zf.push(ZXing.BarcodeFormat.CODE_128);
+        if(formats.includes('upc_a'))zf.push(ZXing.BarcodeFormat.UPC_A); if(formats.includes('upc_e'))zf.push(ZXing.BarcodeFormat.UPC_E);
+        if(!zf.length)zf.push(ZXing.BarcodeFormat.QR_CODE);
+        h.set(ZXing.DecodeHintType.POSSIBLE_FORMATS,zf); h.set(ZXing.DecodeHintType.TRY_HARDER,true); r.setHints(h);
+        return r.decode(bmp).getText();
       } catch(e) {}
       return null;
     }
 
-    // ══════════════════════════════════════════════════════
-    //  RÁFAGA CON RECORTE ALTERNADO
-    //  Frame par  → recorte centrado (zona de la guía)
-    //  Frame impar → frame completo (por si el código está fuera)
-    //  Se detiene en cuanto uno devuelve resultado
-    // ══════════════════════════════════════════════════════
+    // ── Ráfaga con recorte alternado ──
     function burstScan(videoEl, fullCanvas, cropCanvas, formats, cropType, barEl, fillEl, guideEl) {
       return new Promise(function(resolve) {
-        var frame = 0;
-        var found = false;
-
-        barEl.style.display = 'block';
-        fillEl.style.width = '0%';
-        if (guideEl) guideEl.classList.add('guide-scanning');
-
+        var frame=0, found=false;
+        barEl.style.display='block'; fillEl.style.width='0%';
+        if(guideEl) guideEl.classList.add('guide-scanning');
         var interval = setInterval(function() {
-          if (found) return;
+          if(found) return;
           frame++;
-
-          fillEl.style.width = Math.round((frame / BURST_FRAMES) * 100) + '%';
-
-          // Alternar: par = recorte centrado, impar = completo
-          var useCrop = (frame % 2 === 0) ? cropType : 'full';
-          var targetCanvas = capturarFrame(videoEl, fullCanvas, cropCanvas, useCrop);
-
-          decodificarCanvas(targetCanvas, formats).then(function(code) {
-            if (code && code.length >= 4 && !found) {
-              found = true;
-              clearInterval(interval);
-              fillEl.style.width = '100%';
-              if (guideEl) guideEl.classList.remove('guide-scanning');
-              setTimeout(function() { barEl.style.display = 'none'; }, 300);
+          fillEl.style.width = Math.round((frame/BURST_FRAMES)*100)+'%';
+          var useCrop = (frame%2===0) ? cropType : 'full';
+          var target = capturarFrame(videoEl, fullCanvas, cropCanvas, useCrop);
+          decodificarCanvas(target, formats).then(function(code) {
+            if(code && code.length>=4 && !found) {
+              found=true; clearInterval(interval);
+              fillEl.style.width='100%';
+              if(guideEl) guideEl.classList.remove('guide-scanning');
+              setTimeout(function(){barEl.style.display='none';},300);
               resolve(code);
             }
           });
-
-          if (frame >= BURST_FRAMES) {
+          if(frame>=BURST_FRAMES) {
             clearInterval(interval);
-            setTimeout(function() {
-              if (!found) {
-                barEl.style.display = 'none';
-                if (guideEl) guideEl.classList.remove('guide-scanning');
-                resolve(null);
-              }
-            }, 600);
+            setTimeout(function(){ if(!found){barEl.style.display='none'; if(guideEl)guideEl.classList.remove('guide-scanning'); resolve(null);} },600);
           }
         }, BURST_INTERVAL_MS);
       });
+    }
+
+    // ══════════════════════════════════════
+    //  STATUS HELPERS con iconos
+    // ══════════════════════════════════════
+    function setQRStatus(text, type, icon) {
+      document.getElementById('qrStatusRow').className = 'status-row ' + (type||'ready');
+      document.getElementById('qrStatusIcon').textContent = icon||'center_focus_strong';
+      document.getElementById('qrStatusText').innerHTML = text;
+    }
+    function setStatus(text, type, icon) {
+      document.getElementById('statusRow').className = 'status-row ' + (type||'ready');
+      document.getElementById('statusIcon').textContent = icon||'center_focus_strong';
+      document.getElementById('statusText').innerHTML = text;
     }
 
     // ══════════════════════════════════════
@@ -338,160 +264,101 @@
     // ══════════════════════════════════════
     function abrirSyncQR() {
       mostrar('qrReader');
-      var videoEl = document.getElementById('qrVideo');
       setQRStatus('Apunta al QR y pulsa ESCANEAR', 'ready', 'center_focus_strong');
-
-      abrirCamaraHD(videoEl)
-        .then(function(ms) {
-          syncStream = ms;
-          document.getElementById('btnSyncScan').disabled = false;
-        })
-        .catch(function(err) {
-          setQRStatus('Error de cámara: ' + err.message, 'error', 'no_photography');
-          document.getElementById('btnSyncScan').disabled = true;
-        });
-    }
-
-    function setQRStatus(text, type, icon) {
-      document.getElementById('qrStatusRow').className = 'status-row ' + (type || 'ready');
-      document.getElementById('qrStatusIcon').textContent = icon || 'center_focus_strong';
-      document.getElementById('qrStatusText').textContent = text;
+      abrirCamaraHD(document.getElementById('qrVideo'))
+        .then(function(ms) { syncStream=ms; document.getElementById('btnSyncScan').disabled=false; })
+        .catch(function(err) { setQRStatus('Error de cámara: '+err.message, 'error', 'no_photography'); document.getElementById('btnSyncScan').disabled=true; });
     }
 
     async function escanearQRSync() {
-      var videoEl = document.getElementById('qrVideo');
-      var btn = document.getElementById('btnSyncScan');
+      var videoEl=document.getElementById('qrVideo'), btn=document.getElementById('btnSyncScan');
+      if(!videoEl.videoWidth||videoEl.readyState<videoEl.HAVE_ENOUGH_DATA){setQRStatus('Cámara no lista','error','warning');return;}
+      btn.disabled=true;
+      setQRStatus('Escaneando...', 'scanning', 'search');
+      if(navigator.vibrate) navigator.vibrate(50);
 
-      if (!videoEl.videoWidth || videoEl.readyState < videoEl.HAVE_ENOUGH_DATA) {
-        setQRStatus('Cámara no lista', 'error', 'warning'); return;
-      }
+      var data = await burstScan(videoEl, document.getElementById('qrCanvas'), document.getElementById('qrCropCanvas'),
+        ['qr_code'], 'qr', document.getElementById('qrBurstBar'), document.getElementById('qrBurstFill'), document.getElementById('guideQR'));
 
-      btn.disabled = true;
-      setQRStatus('Escaneando...', 'sending', 'search');
-      if (navigator.vibrate) navigator.vibrate(50);
-
-      var data = await burstScan(
-        videoEl,
-        document.getElementById('qrCanvas'),
-        document.getElementById('qrCropCanvas'),
-        ['qr_code'], 'qr',
-        document.getElementById('qrBurstBar'),
-        document.getElementById('qrBurstFill'),
-        document.getElementById('guideQR')
-      );
-
-      if (data) {
+      if(data) {
         try {
-          var config = JSON.parse(data);
-          if (config.url && config.caja) {
-            API_URL = config.url;
-            CAJA = String(config.caja);
-            guardar();
-            cerrarSyncStream();
-            if (navigator.vibrate) navigator.vibrate([100, 50, 100]);
-            setQRStatus('Vinculado a Caja ' + CAJA + ' ✓', 'success', 'check_circle');
-            setTimeout(function() { iniciarEscaneo(); }, 800);
+          var config=JSON.parse(data);
+          if(config.url&&config.caja) {
+            API_URL=config.url; CAJA=String(config.caja); guardar(); cerrarSyncStream();
+            if(navigator.vibrate) navigator.vibrate([100,50,100]);
+            setQRStatus('Vinculado a Caja '+CAJA+' ✓', 'success', 'check_circle');
+            setTimeout(function(){iniciarEscaneo();},800);
             return;
           }
-        } catch(e) {}
-        setQRStatus('QR no válido — usa el de la Caja', 'error', 'warning');
+        }catch(e){}
+        setQRStatus('QR no válido — usa el de la Caja', 'error', 'error_outline');
       } else {
-        setQRStatus('No se detectó QR — acerca más', 'error', 'warning');
+        setQRStatus('No se detectó QR — acerca más', 'error', 'highlight_off');
       }
-
-      setTimeout(function() {
-        setQRStatus('Apunta al QR y pulsa ESCANEAR', 'ready', 'center_focus_strong');
-        btn.disabled = false;
-      }, 1500);
+      setTimeout(function(){setQRStatus('Apunta al QR y pulsa ESCANEAR','ready','center_focus_strong');btn.disabled=false;},1500);
     }
 
-    function cerrarSyncStream() { if (syncStream) { syncStream.getTracks().forEach(function(t){t.stop();}); syncStream = null; } }
-    function cerrarSyncQR() { cerrarSyncStream(); mostrar('syncScreen'); }
+    function cerrarSyncStream(){if(syncStream){syncStream.getTracks().forEach(function(t){t.stop();});syncStream=null;}}
+    function cerrarSyncQR(){cerrarSyncStream();mostrar('syncScreen');}
 
     // ══════════════════════════════════════
     //  PANTALLA 3: ESCÁNER DE LIBROS
     // ══════════════════════════════════════
     function iniciarEscaneo() {
-      document.getElementById('badgeCaja').textContent = 'CAJA ' + CAJA;
+      document.getElementById('badgeCaja').textContent='CAJA '+CAJA;
       mostrar('scanner');
-      abrirCamaraLibros();
+      abrirCamaraHD(document.getElementById('camera-stream'))
+        .then(function(ms){stream=ms; setStatus('Apunta al código y pulsa ESCANEAR','ready','center_focus_strong'); document.getElementById('btnScan').disabled=false;})
+        .catch(function(err){setStatus('Error de cámara: '+err.message,'error','no_photography'); document.getElementById('btnScan').disabled=true;});
     }
-
-    function abrirCamaraLibros() {
-      var videoEl = document.getElementById('camera-stream');
-      abrirCamaraHD(videoEl)
-        .then(function(ms) {
-          stream = ms;
-          setStatus('Apunta al código y pulsa ESCANEAR', 'ready', 'center_focus_strong');
-          document.getElementById('btnScan').disabled = false;
-        })
-        .catch(function(err) {
-          setStatus('Error de cámara: ' + err.message, 'error', 'no_photography');
-          document.getElementById('btnScan').disabled = true;
-        });
-    }
-
-    function cerrarCamara() { if (stream) { stream.getTracks().forEach(function(t){t.stop();}); stream = null; } }
-
-    function setStatus(text, type, icon) {
-      document.getElementById('statusRow').className = 'status-row ' + (type || 'ready');
-      document.getElementById('statusIcon').textContent = icon || 'center_focus_strong';
-      document.getElementById('statusText').textContent = text;
-    }
+    function cerrarCamara(){if(stream){stream.getTracks().forEach(function(t){t.stop();});stream=null;}}
 
     async function escanear() {
-      var videoEl = document.getElementById('camera-stream');
-      var btn = document.getElementById('btnScan');
+      var videoEl=document.getElementById('camera-stream'), btn=document.getElementById('btnScan');
+      if(!videoEl.videoWidth||videoEl.readyState<videoEl.HAVE_ENOUGH_DATA){setStatus('Cámara no lista','error','warning');return;}
+      btn.disabled=true;
+      setStatus('Escaneando...', 'scanning', 'search');
+      if(navigator.vibrate) navigator.vibrate(50);
 
-      if (!videoEl.videoWidth || videoEl.readyState < videoEl.HAVE_ENOUGH_DATA) {
-        setStatus('Cámara no lista', 'error', 'warning'); return;
-      }
+      var code = await burstScan(videoEl, document.getElementById('scanCanvas'), document.getElementById('scanCropCanvas'),
+        ['ean_13','ean_8','qr_code','code_128','upc_a','upc_e'], 'barcode',
+        document.getElementById('scanBurstBar'), document.getElementById('scanBurstFill'), document.getElementById('guideBarcode'));
 
-      btn.disabled = true;
-      setStatus('Escaneando...', 'sending', 'search');
-      if (navigator.vibrate) navigator.vibrate(50);
+      if(code && code.length>=8) {
+        // ── DETECTADO → verde ──
+        if(navigator.vibrate) navigator.vibrate(80);
+        setStatus('<span class="code-number">'+code+'</span>', 'success', 'check_circle');
 
-      var code = await burstScan(
-        videoEl,
-        document.getElementById('scanCanvas'),
-        document.getElementById('scanCropCanvas'),
-        ['ean_13', 'ean_8', 'qr_code', 'code_128', 'upc_a', 'upc_e'], 'barcode',
-        document.getElementById('scanBurstBar'),
-        document.getElementById('scanBurstFill'),
-        document.getElementById('guideBarcode')
-      );
+        // ── Pausa breve para ver el código, luego ENVIANDO → azul ──
+        await new Promise(function(r){setTimeout(r,600);});
+        setStatus('Enviando <span class="code-number">'+code+'</span>...', 'sending', 'cloud_upload');
 
-      if (code && code.length >= 8) {
-        enviarALaCaja(code);
+        try {
+          var sep=API_URL.includes('?')?'&':'?';
+          var url=API_URL+sep+'page=api&action=setScannerCode&caja='+encodeURIComponent(CAJA)+'&codigo='+encodeURIComponent(code);
+          await fetch(url,{mode:'no-cors'});
+
+          // ── ENVIADO → verde ──
+          if(navigator.vibrate) navigator.vibrate(100);
+          setStatus('Enviado ✓ <span class="code-number">'+code+'</span>', 'success', 'cloud_done');
+          document.getElementById('lastCode').textContent = 'Último: '+code;
+        } catch(e) {
+          // ── ERROR DE RED → rojo ──
+          setStatus('Error de red al enviar', 'error', 'cloud_off');
+        }
       } else {
-        setStatus('No se detectó código — acerca más', 'error', 'warning');
-        setTimeout(function() {
-          setStatus('Apunta al código y pulsa ESCANEAR', 'ready', 'center_focus_strong');
-          btn.disabled = false;
-        }, 1500);
+        // ── NO DETECTADO → rojo ──
+        setStatus('No se detectó código — acerca más', 'error', 'highlight_off');
       }
-    }
 
-    async function enviarALaCaja(code) {
-      if (navigator.vibrate) navigator.vibrate(100);
-      setStatus('Enviando ' + code + '...', 'sending', 'wifi_tethering');
-      try {
-        var sep = API_URL.includes('?') ? '&' : '?';
-        var url = API_URL + sep + 'page=api&action=setScannerCode&caja=' + encodeURIComponent(CAJA) + '&codigo=' + encodeURIComponent(code);
-        await fetch(url, { mode: 'no-cors' });
-        setStatus('Enviado ✓  ' + code, 'success', 'check_circle');
-        document.getElementById('lastCode').textContent = 'Último: ' + code;
-      } catch(e) {
-        setStatus('Error de red', 'error', 'error_outline');
-      }
-      setTimeout(function() {
-        setStatus('Apunta al código y pulsa ESCANEAR', 'ready', 'center_focus_strong');
-        document.getElementById('btnScan').disabled = false;
-      }, 1500);
+      setTimeout(function(){
+        setStatus('Apunta al código y pulsa ESCANEAR','ready','center_focus_strong');
+        btn.disabled=false;
+      },1800);
     }
 
     cargar();
-    window.addEventListener('beforeunload', function() { cerrarCamara(); cerrarSyncStream(); });
+    window.addEventListener('beforeunload',function(){cerrarCamara();cerrarSyncStream();});
   </script>
 </body>
 </html>
