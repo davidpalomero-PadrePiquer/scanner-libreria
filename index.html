@@ -2,115 +2,162 @@
 <html lang="es">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="mobile-web-app-capable" content="yes">
   <title>Escáner Móvil</title>
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200" />
   <script type="text/javascript" src="https://unpkg.com/@zxing/library@0.21.3"></script>
   <style>
     * { box-sizing: border-box; margin: 0; padding: 0; }
-    body { font-family: 'Segoe UI', sans-serif; background: #121212; color: white; height: 100vh; display: flex; flex-direction: column; overflow: hidden; }
 
-    .header { padding: 12px 16px; text-align: center; font-weight: bold; font-size: 1rem; display: flex; align-items: center; justify-content: center; gap: 8px; }
-    .header-main { background: #1a237e; }
-    .badge { background: #ff6f00; padding: 4px 12px; border-radius: 20px; font-size: 0.85rem; }
-    .header-with-action { display: flex; align-items: center; justify-content: space-between; padding: 10px 12px; }
-    .header-with-action .header-title { display: flex; align-items: center; gap: 8px; font-weight: bold; font-size: 1rem; }
-    .btn-header { padding: 8px 16px; border: none; border-radius: 10px; font-size: 0.85rem; font-weight: bold; cursor: pointer; display: flex; align-items: center; gap: 6px; }
-    .btn-header-gray { background: rgba(255,255,255,0.25); color: white; }
-    .btn-header-orange { background: rgba(255,165,0,0.7); color: white; }
+    html, body {
+      height: 100%;
+      overflow: hidden;
+      font-family: 'Segoe UI', sans-serif;
+      background: #121212;
+      color: white;
+    }
 
-    #syncScreen { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 24px; gap: 16px; }
-    #syncScreen h2 { font-size: 1.3rem; text-align: center; }
-    .btn-sync { background: #ff6f00; color: white; border: none; padding: 16px 36px; border-radius: 12px; font-size: 1.1rem; font-weight: bold; cursor: pointer; display: flex; align-items: center; gap: 10px; }
-    .btn-manual { background: transparent; color: #888; border: 1px solid #444; padding: 10px 20px; border-radius: 8px; font-size: 0.85rem; cursor: pointer; }
-    .connected-info { background: #1b5e20; padding: 14px 20px; border-radius: 10px; text-align: center; font-size: 0.95rem; max-width: 350px; width: 100%; }
-    .connected-info strong { color: #69f0ae; }
-    .btn-continue { background: #2e7d32; color: white; border: none; padding: 12px 28px; border-radius: 10px; font-size: 1rem; font-weight: bold; cursor: pointer; display: flex; align-items: center; gap: 8px; margin-top: 10px; }
-    #manualConfig { display: none; width: 100%; max-width: 400px; padding: 16px; background: #1e1e1e; border-radius: 10px; }
-    #manualConfig.visible { display: block; }
-    #manualConfig label { display: block; font-size: 0.8rem; color: #aaa; margin: 8px 0 4px; }
-    #manualConfig input { width: 100%; padding: 10px; border: 2px solid #333; border-radius: 8px; background: #2a2a2a; color: white; font-size: 0.95rem; }
-    #manualConfig input:focus { border-color: #ff6f00; outline: none; }
-    .btn-connect { background: #2e7d32; color: white; border: none; padding: 10px 24px; border-radius: 8px; font-size: 0.95rem; font-weight: bold; cursor: pointer; margin-top: 12px; width: 100%; }
+    /* ══════════════════════════════════════════
+       PANTALLAS: fixed inset para llenar EXACTAMENTE
+       el viewport visible, ignorando barras del navegador
+       ══════════════════════════════════════════ */
+    .screen {
+      position: fixed;
+      top: 0; left: 0; right: 0; bottom: 0;
+      display: none;
+      flex-direction: column;
+      /* Safe area para notch / barra inferior iOS */
+      padding-bottom: env(safe-area-inset-bottom, 0px);
+      background: #121212;
+      z-index: 1;
+    }
+    .screen.active { display: flex; }
 
-    #qrReader { display: none; flex: 1; flex-direction: column; }
-    #scanner { display: none; flex: 1; flex-direction: column; }
+    /* ── Headers ── */
+    .header-main { background: #1a237e; padding: 10px 12px; display: flex; align-items: center; justify-content: space-between; flex-shrink: 0; }
+    .header-main.header-orange { background: #e65100; }
+    .header-title { display: flex; align-items: center; gap: 6px; font-weight: bold; font-size: 0.95rem; color: white; }
+    .badge { background: #ff6f00; padding: 3px 10px; border-radius: 16px; font-size: 0.8rem; font-weight: bold; color: white; }
+    .btn-header { padding: 7px 14px; border: none; border-radius: 8px; font-size: 0.8rem; font-weight: bold; cursor: pointer; display: flex; align-items: center; gap: 5px; color: white; flex-shrink: 0; }
+    .btn-header-gray { background: rgba(255,255,255,0.25); }
+    .btn-header-orange { background: rgba(255,165,0,0.7); }
 
-    .camera-area { flex: 1; position: relative; background: #000; overflow: hidden; }
-    .camera-area video { width: 100%; height: 100%; object-fit: cover; }
+    /* ── Zona cámara: ocupa todo el espacio disponible ── */
+    .camera-area {
+      flex: 1;
+      position: relative;
+      background: #000;
+      overflow: hidden;
+      min-height: 0; /* crucial para flex shrink */
+    }
+    .camera-area video { width: 100%; height: 100%; object-fit: cover; display: block; }
     canvas { display: none; }
 
-    .guide-qr { position: absolute; top: 50%; left: 50%; transform: translate(-50%,-50%); width: 220px; height: 220px; border: 3px solid rgba(0,255,0,0.5); border-radius: 16px; pointer-events: none; z-index: 2; transition: border-color 0.2s; }
-    .guide-barcode { position: absolute; top: 50%; left: 50%; transform: translate(-50%,-50%); width: 80%; max-width: 340px; height: 120px; border: 3px solid rgba(0,255,0,0.5); border-radius: 12px; pointer-events: none; z-index: 2; transition: border-color 0.2s; }
+    .guide-qr { position: absolute; top: 50%; left: 50%; transform: translate(-50%,-50%); width: 200px; height: 200px; border: 3px solid rgba(0,255,0,0.5); border-radius: 14px; pointer-events: none; z-index: 2; transition: border-color 0.2s; }
+    .guide-barcode { position: absolute; top: 50%; left: 50%; transform: translate(-50%,-50%); width: 80%; max-width: 320px; height: 100px; border: 3px solid rgba(0,255,0,0.5); border-radius: 10px; pointer-events: none; z-index: 2; transition: border-color 0.2s; }
     .guide-scanning { border-color: rgba(255,235,59,0.8) !important; }
 
+    /* Botón ESCANEAR fijo sobre la cámara */
     .btn-scan-big {
-      position: absolute; bottom: 20px; left: 50%; transform: translateX(-50%);
-      padding: 18px 50px; font-size: 22px; font-weight: bold;
-      color: white; border: none; border-radius: 14px;
+      position: absolute; bottom: 12px; left: 50%; transform: translateX(-50%);
+      padding: 14px 40px; font-size: 20px; font-weight: bold;
+      color: white; border: none; border-radius: 12px;
       cursor: pointer; z-index: 5; opacity: 0.85;
-      display: flex; align-items: center; gap: 10px;
+      display: flex; align-items: center; gap: 8px;
+      white-space: nowrap;
     }
     .btn-scan-big:active { opacity: 1; }
     .btn-scan-big:disabled { background: #555 !important; opacity: 0.5; }
 
-    .status-bar { padding: 12px; text-align: center; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 6px; }
-    .status-row { display: flex; align-items: center; gap: 8px; font-weight: 600; font-size: 0.95rem; }
+    .burst-bar { position: absolute; bottom: 72px; left: 50%; transform: translateX(-50%); width: 55%; max-width: 250px; height: 5px; background: rgba(255,255,255,0.15); border-radius: 3px; z-index: 6; display: none; }
+    .burst-bar-fill { height: 100%; background: #ffeb3b; border-radius: 3px; width: 0%; transition: width 0.12s linear; }
+
+    /* ── Barra de estado inferior: altura fija, nunca se corta ── */
+    .status-bar {
+      flex-shrink: 0;
+      padding: 10px 12px;
+      padding-bottom: calc(10px + env(safe-area-inset-bottom, 0px));
+      text-align: center;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 4px;
+      background: #121212;
+      min-height: 60px;
+    }
+    .status-row { display: flex; align-items: center; gap: 6px; font-weight: 600; font-size: 0.9rem; flex-wrap: wrap; justify-content: center; }
     .status-row.success { color: #4caf50; }
     .status-row.sending { color: #42a5f5; }
     .status-row.scanning { color: #ffeb3b; }
     .status-row.error { color: #f44336; }
     .status-row.ready { color: #b0bec5; }
-    .last-code { font-size: 0.85rem; color: #888; }
-    .code-number { font-family: 'Courier New', monospace; font-size: 1.05rem; letter-spacing: 1px; }
+    .last-code { font-size: 0.8rem; color: #666; }
+    .code-number { font-family: 'Courier New', monospace; font-size: 0.95rem; letter-spacing: 1px; }
 
-    .burst-bar { position: absolute; bottom: 90px; left: 50%; transform: translateX(-50%); width: 60%; max-width: 280px; height: 6px; background: rgba(255,255,255,0.15); border-radius: 3px; z-index: 6; display: none; }
-    .burst-bar-fill { height: 100%; background: #ffeb3b; border-radius: 3px; width: 0%; transition: width 0.12s linear; }
+    /* ── Pantalla SYNC ── */
+    .sync-content { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 20px; gap: 14px; overflow-y: auto; }
+    .sync-content h2 { font-size: 1.2rem; text-align: center; }
+    .btn-sync { background: #ff6f00; color: white; border: none; padding: 14px 32px; border-radius: 12px; font-size: 1.05rem; font-weight: bold; cursor: pointer; display: flex; align-items: center; gap: 8px; }
+    .btn-manual { background: transparent; color: #888; border: 1px solid #444; padding: 8px 16px; border-radius: 8px; font-size: 0.8rem; cursor: pointer; }
+    .connected-info { background: #1b5e20; padding: 12px 16px; border-radius: 10px; text-align: center; font-size: 0.9rem; max-width: 340px; width: 100%; }
+    .connected-info strong { color: #69f0ae; }
+    .btn-continue { background: #2e7d32; color: white; border: none; padding: 10px 24px; border-radius: 10px; font-size: 0.95rem; font-weight: bold; cursor: pointer; display: flex; align-items: center; gap: 6px; margin-top: 8px; }
+    #manualConfig { display: none; width: 100%; max-width: 380px; padding: 14px; background: #1e1e1e; border-radius: 10px; }
+    #manualConfig.visible { display: block; }
+    #manualConfig label { display: block; font-size: 0.75rem; color: #aaa; margin: 6px 0 3px; }
+    #manualConfig input { width: 100%; padding: 9px; border: 2px solid #333; border-radius: 8px; background: #2a2a2a; color: white; font-size: 0.9rem; }
+    #manualConfig input:focus { border-color: #ff6f00; outline: none; }
+    .btn-connect { background: #2e7d32; color: white; border: none; padding: 9px 20px; border-radius: 8px; font-size: 0.9rem; font-weight: bold; cursor: pointer; margin-top: 10px; width: 100%; }
   </style>
 </head>
 <body>
 
   <!-- ══════════ PANTALLA 1: SINCRONIZACIÓN ══════════ -->
-  <div id="syncScreen">
-    <span class="material-symbols-outlined" style="font-size:64px; color:#ff6f00;">qr_code_scanner</span>
-    <h2>Escáner Móvil</h2>
-    <div class="connected-info" id="savedInfo" style="display:none;">
-      <span class="material-symbols-outlined" style="font-size:18px; vertical-align:middle;">link</span>
-      Última conexión: <strong id="savedCajaLabel">Caja 1</strong>
-      <br>
-      <button class="btn-continue" onclick="usarGuardada()" style="margin:10px auto 0;">
-        <span class="material-symbols-outlined">play_arrow</span> Continuar
+  <div class="screen active" id="syncScreen">
+    <div class="sync-content">
+      <span class="material-symbols-outlined" style="font-size:56px; color:#ff6f00;">qr_code_scanner</span>
+      <h2>Escáner Móvil</h2>
+      <div class="connected-info" id="savedInfo" style="display:none;">
+        <span class="material-symbols-outlined" style="font-size:16px; vertical-align:middle;">link</span>
+        Última conexión: <strong id="savedCajaLabel">Caja 1</strong>
+        <br>
+        <button class="btn-continue" onclick="usarGuardada()" style="margin:8px auto 0;">
+          <span class="material-symbols-outlined">play_arrow</span> Continuar
+        </button>
+      </div>
+      <p style="color:#aaa; text-align:center; max-width:300px; font-size:0.85rem;">
+        Escanea el QR de la pantalla de la Caja para vincular este móvil.
+      </p>
+      <button class="btn-sync" onclick="abrirSyncQR()">
+        <span class="material-symbols-outlined">qr_code_2</span> Sincronizar con Caja
       </button>
-    </div>
-    <p style="color:#aaa; text-align:center; max-width:320px; font-size:0.9rem;">
-      Escanea el código QR que aparece en la pantalla de la Caja para vincular este móvil.
-    </p>
-    <button class="btn-sync" onclick="abrirSyncQR()">
-      <span class="material-symbols-outlined">qr_code_2</span> Sincronizar con Caja
-    </button>
-    <button class="btn-manual" onclick="toggleManual()">
-      <span class="material-symbols-outlined" style="font-size:16px; vertical-align:middle;">edit</span>
-      Configurar manualmente
-    </button>
-    <div id="manualConfig">
-      <label>URL del sistema (Apps Script)</label>
-      <input type="url" id="inputUrl" placeholder="https://script.google.com/macros/s/.../exec" />
-      <label>Número de Caja</label>
-      <input type="number" id="inputCaja" value="1" min="1" max="99" />
-      <button class="btn-connect" onclick="conectarManual()">Conectar</button>
+      <button class="btn-manual" onclick="toggleManual()">
+        <span class="material-symbols-outlined" style="font-size:14px; vertical-align:middle;">edit</span>
+        Configurar manualmente
+      </button>
+      <div id="manualConfig">
+        <label>URL del sistema (Apps Script)</label>
+        <input type="url" id="inputUrl" placeholder="https://script.google.com/macros/s/.../exec" />
+        <label>Número de Caja</label>
+        <input type="number" id="inputCaja" value="1" min="1" max="99" />
+        <button class="btn-connect" onclick="conectarManual()">Conectar</button>
+      </div>
     </div>
   </div>
 
   <!-- ══════════ PANTALLA 2: QR VINCULACIÓN ══════════ -->
-  <div id="qrReader">
-    <div class="header header-main header-with-action">
+  <div class="screen" id="qrReader">
+    <div class="header-main">
       <button class="btn-header btn-header-gray" onclick="cerrarSyncQR()">
         <span class="material-symbols-outlined" style="font-size:18px;">arrow_back</span> Cancelar
       </button>
       <div class="header-title">
         <span class="material-symbols-outlined">qr_code_2</span> Apunta al QR
       </div>
-      <div style="width:90px;"></div>
+      <div style="width:80px;"></div>
     </div>
     <div class="camera-area">
       <video id="qrVideo" autoplay playsinline muted></video>
@@ -131,10 +178,10 @@
   </div>
 
   <!-- ══════════ PANTALLA 3: ESCÁNER LIBROS ══════════ -->
-  <div id="scanner">
-    <div class="header header-main header-with-action">
+  <div class="screen" id="scanner">
+    <div class="header-main">
       <button class="btn-header btn-header-orange" onclick="desconectar()">
-        <span class="material-symbols-outlined" style="font-size:18px;">link_off</span> Cambiar caja
+        <span class="material-symbols-outlined" style="font-size:18px;">link_off</span> Cambiar
       </button>
       <div class="header-title">
         <span class="material-symbols-outlined">qr_code_scanner</span> Escáner Móvil
@@ -161,17 +208,48 @@
   </div>
 
   <script>
+    // ══════════════════════════════════════════════════
+    //  VIEWPORT FIX: ajustar altura real en móviles
+    //  100vh miente — esto usa la altura real visible
+    // ══════════════════════════════════════════════════
+    function fixViewport() {
+      var vh = window.innerHeight;
+      document.documentElement.style.setProperty('--real-vh', vh + 'px');
+      // Forzar a cada pantalla a usar la altura real
+      var screens = document.querySelectorAll('.screen');
+      for (var i = 0; i < screens.length; i++) {
+        screens[i].style.height = vh + 'px';
+        screens[i].style.bottom = 'auto';
+      }
+    }
+    fixViewport();
+    window.addEventListener('resize', fixViewport);
+    // visualViewport API (más preciso en iOS Safari)
+    if (window.visualViewport) {
+      window.visualViewport.addEventListener('resize', fixViewport);
+    }
+    // Re-fix después de orientación
+    window.addEventListener('orientationchange', function() { setTimeout(fixViewport, 300); });
+
+    // ══════════════════════════════════════
+    //  ESTADO
+    // ══════════════════════════════════════
     var API_URL = '', CAJA = '1', stream = null, syncStream = null;
     var BURST_FRAMES = 12, BURST_INTERVAL_MS = 150;
 
     function guardar() { try { localStorage.setItem('scanner_url', API_URL); localStorage.setItem('scanner_caja', CAJA); } catch(e) {} }
     function cargar() {
       try { var u = localStorage.getItem('scanner_url'), c = localStorage.getItem('scanner_caja');
-        if (u && c) { API_URL = u; CAJA = c; document.getElementById('inputUrl').value = u; document.getElementById('inputCaja').value = c; document.getElementById('savedCajaLabel').textContent = 'Caja ' + c; document.getElementById('savedInfo').style.display = 'block'; }
+        if (u && c) { API_URL = u; CAJA = c; document.getElementById('inputUrl').value = u; document.getElementById('inputCaja').value = c;
+          document.getElementById('savedCajaLabel').textContent = 'Caja ' + c; document.getElementById('savedInfo').style.display = 'block'; }
       } catch(e) {}
     }
 
-    function mostrar(id) { ['syncScreen','qrReader','scanner'].forEach(function(s){document.getElementById(s).style.display='none';}); document.getElementById(id).style.display='flex'; }
+    function mostrar(id) {
+      document.querySelectorAll('.screen').forEach(function(s) { s.classList.remove('active'); });
+      document.getElementById(id).classList.add('active');
+      fixViewport();
+    }
     function usarGuardada() { iniciarEscaneo(); }
     function conectarManual() { var url=document.getElementById('inputUrl').value.trim(), caja=document.getElementById('inputCaja').value.trim(); if(!url||!url.includes('script.google.com')){alert('URL no válida');return;} API_URL=url; CAJA=caja||'1'; guardar(); iniciarEscaneo(); }
     function desconectar() { cerrarCamara(); mostrar('syncScreen'); }
@@ -183,7 +261,7 @@
         .then(function(ms) { videoEl.srcObject = ms; videoEl.setAttribute('playsinline','true'); videoEl.play(); return ms; });
     }
 
-    // ── Recorte centrado ──
+    // ── Recorte ──
     function capturarFrame(videoEl, fullCanvas, cropCanvas, cropType) {
       var vw = videoEl.videoWidth, vh = videoEl.videoHeight;
       fullCanvas.width = vw; fullCanvas.height = vh;
@@ -216,85 +294,53 @@
       return null;
     }
 
-    // ── Ráfaga con recorte alternado ──
+    // ── Ráfaga ──
     function burstScan(videoEl, fullCanvas, cropCanvas, formats, cropType, barEl, fillEl, guideEl) {
       return new Promise(function(resolve) {
         var frame=0, found=false;
         barEl.style.display='block'; fillEl.style.width='0%';
         if(guideEl) guideEl.classList.add('guide-scanning');
         var interval = setInterval(function() {
-          if(found) return;
-          frame++;
+          if(found) return; frame++;
           fillEl.style.width = Math.round((frame/BURST_FRAMES)*100)+'%';
           var useCrop = (frame%2===0) ? cropType : 'full';
-          var target = capturarFrame(videoEl, fullCanvas, cropCanvas, useCrop);
-          decodificarCanvas(target, formats).then(function(code) {
-            if(code && code.length>=4 && !found) {
-              found=true; clearInterval(interval);
-              fillEl.style.width='100%';
-              if(guideEl) guideEl.classList.remove('guide-scanning');
-              setTimeout(function(){barEl.style.display='none';},300);
-              resolve(code);
-            }
+          decodificarCanvas(capturarFrame(videoEl,fullCanvas,cropCanvas,useCrop), formats).then(function(code) {
+            if(code && code.length>=4 && !found) { found=true; clearInterval(interval); fillEl.style.width='100%';
+              if(guideEl)guideEl.classList.remove('guide-scanning'); setTimeout(function(){barEl.style.display='none';},300); resolve(code); }
           });
-          if(frame>=BURST_FRAMES) {
-            clearInterval(interval);
-            setTimeout(function(){ if(!found){barEl.style.display='none'; if(guideEl)guideEl.classList.remove('guide-scanning'); resolve(null);} },600);
-          }
+          if(frame>=BURST_FRAMES) { clearInterval(interval);
+            setTimeout(function(){ if(!found){barEl.style.display='none'; if(guideEl)guideEl.classList.remove('guide-scanning'); resolve(null);} },600); }
         }, BURST_INTERVAL_MS);
       });
     }
 
-    // ══════════════════════════════════════
-    //  STATUS HELPERS con iconos
-    // ══════════════════════════════════════
-    function setQRStatus(text, type, icon) {
-      document.getElementById('qrStatusRow').className = 'status-row ' + (type||'ready');
-      document.getElementById('qrStatusIcon').textContent = icon||'center_focus_strong';
-      document.getElementById('qrStatusText').innerHTML = text;
-    }
-    function setStatus(text, type, icon) {
-      document.getElementById('statusRow').className = 'status-row ' + (type||'ready');
-      document.getElementById('statusIcon').textContent = icon||'center_focus_strong';
-      document.getElementById('statusText').innerHTML = text;
-    }
+    // ── Status helpers ──
+    function setQRStatus(t,type,icon){document.getElementById('qrStatusRow').className='status-row '+(type||'ready');document.getElementById('qrStatusIcon').textContent=icon||'center_focus_strong';document.getElementById('qrStatusText').innerHTML=t;}
+    function setStatus(t,type,icon){document.getElementById('statusRow').className='status-row '+(type||'ready');document.getElementById('statusIcon').textContent=icon||'center_focus_strong';document.getElementById('statusText').innerHTML=t;}
 
     // ══════════════════════════════════════
     //  PANTALLA 2: SYNC QR
     // ══════════════════════════════════════
     function abrirSyncQR() {
       mostrar('qrReader');
-      setQRStatus('Apunta al QR y pulsa ESCANEAR', 'ready', 'center_focus_strong');
+      setQRStatus('Apunta al QR y pulsa ESCANEAR','ready','center_focus_strong');
       abrirCamaraHD(document.getElementById('qrVideo'))
-        .then(function(ms) { syncStream=ms; document.getElementById('btnSyncScan').disabled=false; })
-        .catch(function(err) { setQRStatus('Error de cámara: '+err.message, 'error', 'no_photography'); document.getElementById('btnSyncScan').disabled=true; });
+        .then(function(ms){syncStream=ms;document.getElementById('btnSyncScan').disabled=false;})
+        .catch(function(err){setQRStatus('Error cámara: '+err.message,'error','no_photography');document.getElementById('btnSyncScan').disabled=true;});
     }
 
     async function escanearQRSync() {
-      var videoEl=document.getElementById('qrVideo'), btn=document.getElementById('btnSyncScan');
+      var videoEl=document.getElementById('qrVideo'),btn=document.getElementById('btnSyncScan');
       if(!videoEl.videoWidth||videoEl.readyState<videoEl.HAVE_ENOUGH_DATA){setQRStatus('Cámara no lista','error','warning');return;}
-      btn.disabled=true;
-      setQRStatus('Escaneando...', 'scanning', 'search');
-      if(navigator.vibrate) navigator.vibrate(50);
-
-      var data = await burstScan(videoEl, document.getElementById('qrCanvas'), document.getElementById('qrCropCanvas'),
-        ['qr_code'], 'qr', document.getElementById('qrBurstBar'), document.getElementById('qrBurstFill'), document.getElementById('guideQR'));
-
-      if(data) {
-        try {
-          var config=JSON.parse(data);
-          if(config.url&&config.caja) {
-            API_URL=config.url; CAJA=String(config.caja); guardar(); cerrarSyncStream();
-            if(navigator.vibrate) navigator.vibrate([100,50,100]);
-            setQRStatus('Vinculado a Caja '+CAJA+' ✓', 'success', 'check_circle');
-            setTimeout(function(){iniciarEscaneo();},800);
-            return;
-          }
-        }catch(e){}
-        setQRStatus('QR no válido — usa el de la Caja', 'error', 'error_outline');
-      } else {
-        setQRStatus('No se detectó QR — acerca más', 'error', 'highlight_off');
-      }
+      btn.disabled=true; setQRStatus('Escaneando...','scanning','search');
+      if(navigator.vibrate)navigator.vibrate(50);
+      var data=await burstScan(videoEl,document.getElementById('qrCanvas'),document.getElementById('qrCropCanvas'),
+        ['qr_code'],'qr',document.getElementById('qrBurstBar'),document.getElementById('qrBurstFill'),document.getElementById('guideQR'));
+      if(data){try{var c=JSON.parse(data);if(c.url&&c.caja){API_URL=c.url;CAJA=String(c.caja);guardar();cerrarSyncStream();
+        if(navigator.vibrate)navigator.vibrate([100,50,100]);setQRStatus('Vinculado a Caja '+CAJA+' ✓','success','check_circle');
+        setTimeout(function(){iniciarEscaneo();},800);return;}}catch(e){}
+        setQRStatus('QR no válido — usa el de la Caja','error','error_outline');
+      }else{setQRStatus('No se detectó QR — acerca más','error','highlight_off');}
       setTimeout(function(){setQRStatus('Apunta al QR y pulsa ESCANEAR','ready','center_focus_strong');btn.disabled=false;},1500);
     }
 
@@ -302,59 +348,35 @@
     function cerrarSyncQR(){cerrarSyncStream();mostrar('syncScreen');}
 
     // ══════════════════════════════════════
-    //  PANTALLA 3: ESCÁNER DE LIBROS
+    //  PANTALLA 3: ESCÁNER LIBROS
     // ══════════════════════════════════════
-    function iniciarEscaneo() {
-      document.getElementById('badgeCaja').textContent='CAJA '+CAJA;
-      mostrar('scanner');
+    function iniciarEscaneo(){document.getElementById('badgeCaja').textContent='CAJA '+CAJA;mostrar('scanner');
       abrirCamaraHD(document.getElementById('camera-stream'))
-        .then(function(ms){stream=ms; setStatus('Apunta al código y pulsa ESCANEAR','ready','center_focus_strong'); document.getElementById('btnScan').disabled=false;})
-        .catch(function(err){setStatus('Error de cámara: '+err.message,'error','no_photography'); document.getElementById('btnScan').disabled=true;});
-    }
+        .then(function(ms){stream=ms;setStatus('Apunta al código y pulsa ESCANEAR','ready','center_focus_strong');document.getElementById('btnScan').disabled=false;})
+        .catch(function(err){setStatus('Error cámara: '+err.message,'error','no_photography');document.getElementById('btnScan').disabled=true;});}
     function cerrarCamara(){if(stream){stream.getTracks().forEach(function(t){t.stop();});stream=null;}}
 
-    async function escanear() {
-      var videoEl=document.getElementById('camera-stream'), btn=document.getElementById('btnScan');
+    async function escanear(){
+      var videoEl=document.getElementById('camera-stream'),btn=document.getElementById('btnScan');
       if(!videoEl.videoWidth||videoEl.readyState<videoEl.HAVE_ENOUGH_DATA){setStatus('Cámara no lista','error','warning');return;}
-      btn.disabled=true;
-      setStatus('Escaneando...', 'scanning', 'search');
-      if(navigator.vibrate) navigator.vibrate(50);
-
-      var code = await burstScan(videoEl, document.getElementById('scanCanvas'), document.getElementById('scanCropCanvas'),
-        ['ean_13','ean_8','qr_code','code_128','upc_a','upc_e'], 'barcode',
-        document.getElementById('scanBurstBar'), document.getElementById('scanBurstFill'), document.getElementById('guideBarcode'));
-
-      if(code && code.length>=8) {
-        // ── DETECTADO → verde ──
-        if(navigator.vibrate) navigator.vibrate(80);
-        setStatus('<span class="code-number">'+code+'</span>', 'success', 'check_circle');
-
-        // ── Pausa breve para ver el código, luego ENVIANDO → azul ──
+      btn.disabled=true; setStatus('Escaneando...','scanning','search');
+      if(navigator.vibrate)navigator.vibrate(50);
+      var code=await burstScan(videoEl,document.getElementById('scanCanvas'),document.getElementById('scanCropCanvas'),
+        ['ean_13','ean_8','qr_code','code_128','upc_a','upc_e'],'barcode',
+        document.getElementById('scanBurstBar'),document.getElementById('scanBurstFill'),document.getElementById('guideBarcode'));
+      if(code&&code.length>=8){
+        if(navigator.vibrate)navigator.vibrate(80);
+        setStatus('<span class="code-number">'+code+'</span>','success','check_circle');
         await new Promise(function(r){setTimeout(r,600);});
-        setStatus('Enviando <span class="code-number">'+code+'</span>...', 'sending', 'cloud_upload');
-
-        try {
-          var sep=API_URL.includes('?')?'&':'?';
-          var url=API_URL+sep+'page=api&action=setScannerCode&caja='+encodeURIComponent(CAJA)+'&codigo='+encodeURIComponent(code);
-          await fetch(url,{mode:'no-cors'});
-
-          // ── ENVIADO → verde ──
-          if(navigator.vibrate) navigator.vibrate(100);
-          setStatus('Enviado ✓ <span class="code-number">'+code+'</span>', 'success', 'cloud_done');
-          document.getElementById('lastCode').textContent = 'Último: '+code;
-        } catch(e) {
-          // ── ERROR DE RED → rojo ──
-          setStatus('Error de red al enviar', 'error', 'cloud_off');
-        }
-      } else {
-        // ── NO DETECTADO → rojo ──
-        setStatus('No se detectó código — acerca más', 'error', 'highlight_off');
-      }
-
-      setTimeout(function(){
-        setStatus('Apunta al código y pulsa ESCANEAR','ready','center_focus_strong');
-        btn.disabled=false;
-      },1800);
+        setStatus('Enviando <span class="code-number">'+code+'</span>...','sending','cloud_upload');
+        try{var sep=API_URL.includes('?')?'&':'?';
+          await fetch(API_URL+sep+'page=api&action=setScannerCode&caja='+encodeURIComponent(CAJA)+'&codigo='+encodeURIComponent(code),{mode:'no-cors'});
+          if(navigator.vibrate)navigator.vibrate(100);
+          setStatus('Enviado ✓ <span class="code-number">'+code+'</span>','success','cloud_done');
+          document.getElementById('lastCode').textContent='Último: '+code;
+        }catch(e){setStatus('Error de red al enviar','error','cloud_off');}
+      }else{setStatus('No se detectó código — acerca más','error','highlight_off');}
+      setTimeout(function(){setStatus('Apunta al código y pulsa ESCANEAR','ready','center_focus_strong');btn.disabled=false;},1800);
     }
 
     cargar();
