@@ -9,8 +9,23 @@
   <style>
     * { box-sizing: border-box; margin: 0; padding: 0; }
     body { font-family: 'Segoe UI', sans-serif; background: #121212; color: white; height: 100vh; display: flex; flex-direction: column; overflow: hidden; }
-    .header { background: #1a237e; padding: 14px 16px; text-align: center; font-weight: bold; font-size: 1.1rem; display: flex; align-items: center; justify-content: center; gap: 8px; }
+
+    /* ── Headers ── */
+    .header { padding: 12px 16px; text-align: center; font-weight: bold; font-size: 1rem; display: flex; align-items: center; justify-content: center; gap: 8px; }
+    .header-main { background: #1a237e; }
     .badge { background: #ff6f00; padding: 4px 12px; border-radius: 20px; font-size: 0.85rem; }
+
+    /* Header con botón a la izquierda */
+    .header-with-action { display: flex; align-items: center; justify-content: space-between; padding: 10px 12px; }
+    .header-with-action .header-title { display: flex; align-items: center; gap: 8px; font-weight: bold; font-size: 1rem; }
+    .btn-header {
+      padding: 8px 16px; border: none; border-radius: 10px;
+      font-size: 0.85rem; font-weight: bold; cursor: pointer;
+      display: flex; align-items: center; gap: 6px;
+    }
+    .btn-header-gray { background: rgba(255,255,255,0.25); color: white; }
+    .btn-header-orange { background: rgba(255,165,0,0.7); color: white; }
+    .btn-header-gray:active, .btn-header-orange:active { opacity: 0.7; }
 
     /* ── Pantalla SYNC ── */
     #syncScreen { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 24px; gap: 16px; }
@@ -28,13 +43,16 @@
     #manualConfig input:focus { border-color: #ff6f00; outline: none; }
     .btn-connect { background: #2e7d32; color: white; border: none; padding: 10px 24px; border-radius: 8px; font-size: 0.95rem; font-weight: bold; cursor: pointer; margin-top: 12px; width: 100%; }
 
-    /* ── Pantalla QR Sync ── */
+    /* ── Pantallas con cámara ── */
     #qrReader { display: none; flex: 1; flex-direction: column; }
-    #qrReaderContainer { flex: 1; position: relative; background: #000; overflow: hidden; }
-    #qrReaderContainer video { width: 100%; height: 100%; object-fit: cover; }
+    #scanner { display: none; flex: 1; flex-direction: column; }
+
+    .camera-area { flex: 1; position: relative; background: #000; overflow: hidden; }
+    .camera-area video { width: 100%; height: 100%; object-fit: cover; }
     canvas { display: none; }
-    .qr-guide { position: absolute; top: 50%; left: 50%; transform: translate(-50%,-50%); width: 220px; height: 220px; border: 3px solid rgba(0,255,0,0.5); border-radius: 16px; pointer-events: none; z-index: 2; }
-    .qr-header { background: #1a237e; padding: 10px 16px; text-align: center; font-weight: bold; font-size: 0.95rem; display: flex; align-items: center; justify-content: center; gap: 8px; }
+
+    .guide-qr { position: absolute; top: 50%; left: 50%; transform: translate(-50%,-50%); width: 220px; height: 220px; border: 3px solid rgba(0,255,0,0.5); border-radius: 16px; pointer-events: none; z-index: 2; }
+    .guide-barcode { position: absolute; top: 50%; left: 50%; transform: translate(-50%,-50%); width: 75%; max-width: 320px; height: 100px; border: 3px solid rgba(0,255,0,0.5); border-radius: 12px; pointer-events: none; z-index: 2; }
 
     .btn-scan-big {
       position: absolute; bottom: 20px; left: 50%; transform: translateX(-50%);
@@ -44,26 +62,16 @@
       display: flex; align-items: center; gap: 10px;
     }
     .btn-scan-big:active { opacity: 1; }
-    .btn-scan-big:disabled { background: #555; opacity: 0.5; }
+    .btn-scan-big:disabled { background: #555 !important; opacity: 0.5; }
 
-    #qrStatusBar { padding: 12px; text-align: center; display: flex; flex-direction: column; align-items: center; gap: 8px; }
-    #qrStatusBar .status-row { display: flex; align-items: center; gap: 8px; font-weight: 600; font-size: 0.95rem; }
-    .btn-cancel { background: rgba(255,255,255,0.15); color: #ccc; border: none; padding: 8px 18px; border-radius: 8px; font-size: 0.85rem; cursor: pointer; }
-
-    /* ── Pantalla ESCÁNER ── */
-    #scanner { display: none; flex: 1; flex-direction: column; }
-    #reader-container { flex: 1; position: relative; background: #000; overflow: hidden; }
-    #camera-stream { width: 100%; height: 100%; object-fit: cover; }
-    .scan-guide { position: absolute; top: 50%; left: 50%; transform: translate(-50%,-50%); width: 75%; max-width: 320px; height: 100px; border: 3px solid rgba(0,255,0,0.5); border-radius: 12px; pointer-events: none; z-index: 2; }
-
-    .status-bar { padding: 14px; text-align: center; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 8px; }
-    .status-row { display: flex; align-items: center; gap: 8px; font-weight: 600; font-size: 1rem; }
+    /* ── Status bar ── */
+    .status-bar { padding: 12px; text-align: center; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 6px; }
+    .status-row { display: flex; align-items: center; gap: 8px; font-weight: 600; font-size: 0.95rem; }
     .status-row.success { color: #4caf50; }
     .status-row.sending { color: #ffeb3b; }
     .status-row.error { color: #f44336; }
     .status-row.ready { color: #b0bec5; }
     .last-code { font-size: 0.85rem; color: #888; }
-    .btn-change { background: rgba(255,255,255,0.15); color: #ccc; border: none; padding: 6px 14px; border-radius: 6px; font-size: 0.8rem; cursor: pointer; }
   </style>
 </head>
 <body>
@@ -110,23 +118,28 @@
   <!--  PANTALLA 2: LECTOR QR VINCULACIÓN    -->
   <!-- ══════════════════════════════════════ -->
   <div id="qrReader">
-    <div class="qr-header">
-      <span class="material-symbols-outlined">qr_code_2</span> Apunta al QR de la pantalla
+    <div class="header header-main header-with-action">
+      <button class="btn-header btn-header-gray" onclick="cerrarSyncQR()">
+        <span class="material-symbols-outlined" style="font-size:18px;">arrow_back</span> Cancelar
+      </button>
+      <div class="header-title">
+        <span class="material-symbols-outlined">qr_code_2</span> Apunta al QR de la pantalla
+      </div>
+      <div style="width:90px;"></div>
     </div>
-    <div id="qrReaderContainer">
+    <div class="camera-area">
       <video id="qrVideo" autoplay playsinline muted></video>
       <canvas id="qrCanvas"></canvas>
-      <div class="qr-guide"></div>
-      <button class="btn-scan-big" style="background:#ff6f00;" id="btnSyncScan" onclick="escanearQRSync()">
+      <div class="guide-qr"></div>
+      <button class="btn-scan-big" style="background:rgba(255,165,0,0.85);" id="btnSyncScan" onclick="escanearQRSync()">
         <span class="material-symbols-outlined">center_focus_strong</span> ESCANEAR
       </button>
     </div>
-    <div id="qrStatusBar">
+    <div class="status-bar">
       <div class="status-row ready" id="qrStatusRow">
         <span class="material-symbols-outlined" id="qrStatusIcon">center_focus_strong</span>
         <span id="qrStatusText">Apunta al QR y pulsa ESCANEAR</span>
       </div>
-      <button class="btn-cancel" onclick="cerrarSyncQR()">Cancelar</button>
     </div>
   </div>
 
@@ -134,29 +147,29 @@
   <!--  PANTALLA 3: ESCÁNER DE LIBROS        -->
   <!-- ══════════════════════════════════════ -->
   <div id="scanner">
-    <div class="header">
-      <span class="material-symbols-outlined">qr_code_scanner</span> Escáner Móvil
+    <div class="header header-main header-with-action">
+      <button class="btn-header btn-header-orange" onclick="desconectar()">
+        <span class="material-symbols-outlined" style="font-size:18px;">link_off</span> Cambiar caja
+      </button>
+      <div class="header-title">
+        <span class="material-symbols-outlined">qr_code_scanner</span> Escáner Móvil
+      </div>
       <span class="badge" id="badgeCaja">CAJA 1</span>
     </div>
-
-    <div id="reader-container">
+    <div class="camera-area">
       <video id="camera-stream" autoplay playsinline muted></video>
       <canvas id="scanCanvas"></canvas>
-      <div class="scan-guide"></div>
-      <button class="btn-scan-big" style="background:#2e7d32;" id="btnScan" onclick="escanear()">
+      <div class="guide-barcode"></div>
+      <button class="btn-scan-big" style="background:rgba(46,125,50,0.85);" id="btnScan" onclick="escanear()">
         <span class="material-symbols-outlined">center_focus_strong</span> ESCANEAR
       </button>
     </div>
-
     <div class="status-bar">
       <div class="status-row ready" id="statusRow">
         <span class="material-symbols-outlined" id="statusIcon">center_focus_strong</span>
         <span id="statusText">Apunta al código y pulsa ESCANEAR</span>
       </div>
       <div class="last-code" id="lastCode"></div>
-      <button class="btn-change" onclick="desconectar()">
-        <span class="material-symbols-outlined" style="font-size:14px; vertical-align:middle;">link_off</span> Cambiar caja
-      </button>
     </div>
   </div>
 
@@ -165,7 +178,6 @@
     var CAJA = '1';
     var stream = null;
     var syncStream = null;
-    var nativeDetector = null;
 
     // ── Persistencia ──
     function guardar() {
@@ -207,7 +219,6 @@
     //  DECODIFICAR CANVAS (doble motor)
     // ══════════════════════════════════════
     async function decodificarCanvas(canvas, formats) {
-      // 1. BarcodeDetector nativo
       if ('BarcodeDetector' in window) {
         try {
           var det = new BarcodeDetector({ formats: formats });
@@ -215,7 +226,6 @@
           if (barcodes.length > 0) return barcodes[0].rawValue;
         } catch(e) {}
       }
-      // 2. ZXing bajo nivel
       try {
         var ctx = canvas.getContext('2d');
         var imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
@@ -228,7 +238,6 @@
         var bitmap = new ZXing.BinaryBitmap(new ZXing.HybridBinarizer(source));
         var reader = new ZXing.MultiFormatReader();
         var hints = new Map();
-        // Mapear formatos nativos a ZXing
         var zFormats = [];
         if (formats.includes('qr_code')) zFormats.push(ZXing.BarcodeFormat.QR_CODE);
         if (formats.includes('ean_13')) zFormats.push(ZXing.BarcodeFormat.EAN_13);
@@ -247,7 +256,7 @@
     }
 
     // ══════════════════════════════════════
-    //  PANTALLA 2: SYNC QR — con botón manual
+    //  PANTALLA 2: SYNC QR
     // ══════════════════════════════════════
     function abrirSyncQR() {
       mostrar('qrReader');
@@ -296,7 +305,6 @@
 
       try {
         var data = await Promise.race([decodificarCanvas(canvas, ['qr_code']), timeout]);
-
         if (data) {
           try {
             var config = JSON.parse(data);
@@ -311,7 +319,6 @@
               return;
             }
           } catch(e) {}
-          // QR leído pero no es JSON válido de vinculación
           setQRStatus('QR no válido — usa el QR de la Caja', 'error', 'warning');
         } else {
           setQRStatus('No se detectó QR — reintenta', 'error', 'warning');
@@ -329,7 +336,6 @@
     function cerrarSyncStream() {
       if (syncStream) { syncStream.getTracks().forEach(function(t) { t.stop(); }); syncStream = null; }
     }
-
     function cerrarSyncQR() { cerrarSyncStream(); mostrar('syncScreen'); }
 
     // ══════════════════════════════════════
@@ -430,7 +436,6 @@
       }, 1500);
     }
 
-    // ── Arranque ──
     cargar();
     window.addEventListener('beforeunload', function() { cerrarCamara(); cerrarSyncStream(); });
   </script>
