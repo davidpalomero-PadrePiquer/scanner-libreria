@@ -10,12 +10,10 @@
     * { box-sizing: border-box; margin: 0; padding: 0; }
     body { font-family: 'Segoe UI', sans-serif; background: #121212; color: white; height: 100vh; display: flex; flex-direction: column; overflow: hidden; }
 
-    /* ── Headers ── */
     .header { padding: 12px 16px; text-align: center; font-weight: bold; font-size: 1rem; display: flex; align-items: center; justify-content: center; gap: 8px; }
     .header-main { background: #1a237e; }
     .badge { background: #ff6f00; padding: 4px 12px; border-radius: 20px; font-size: 0.85rem; }
 
-    /* Header con botón a la izquierda */
     .header-with-action { display: flex; align-items: center; justify-content: space-between; padding: 10px 12px; }
     .header-with-action .header-title { display: flex; align-items: center; gap: 8px; font-weight: bold; font-size: 1rem; }
     .btn-header {
@@ -27,7 +25,6 @@
     .btn-header-orange { background: rgba(255,165,0,0.7); color: white; }
     .btn-header-gray:active, .btn-header-orange:active { opacity: 0.7; }
 
-    /* ── Pantalla SYNC ── */
     #syncScreen { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 24px; gap: 16px; }
     #syncScreen h2 { font-size: 1.3rem; text-align: center; }
     .btn-sync { background: #ff6f00; color: white; border: none; padding: 16px 36px; border-radius: 12px; font-size: 1.1rem; font-weight: bold; cursor: pointer; display: flex; align-items: center; gap: 10px; }
@@ -43,7 +40,6 @@
     #manualConfig input:focus { border-color: #ff6f00; outline: none; }
     .btn-connect { background: #2e7d32; color: white; border: none; padding: 10px 24px; border-radius: 8px; font-size: 0.95rem; font-weight: bold; cursor: pointer; margin-top: 12px; width: 100%; }
 
-    /* ── Pantallas con cámara ── */
     #qrReader { display: none; flex: 1; flex-direction: column; }
     #scanner { display: none; flex: 1; flex-direction: column; }
 
@@ -51,8 +47,9 @@
     .camera-area video { width: 100%; height: 100%; object-fit: cover; }
     canvas { display: none; }
 
-    .guide-qr { position: absolute; top: 50%; left: 50%; transform: translate(-50%,-50%); width: 220px; height: 220px; border: 3px solid rgba(0,255,0,0.5); border-radius: 16px; pointer-events: none; z-index: 2; }
-    .guide-barcode { position: absolute; top: 50%; left: 50%; transform: translate(-50%,-50%); width: 75%; max-width: 320px; height: 100px; border: 3px solid rgba(0,255,0,0.5); border-radius: 12px; pointer-events: none; z-index: 2; }
+    .guide-qr { position: absolute; top: 50%; left: 50%; transform: translate(-50%,-50%); width: 220px; height: 220px; border: 3px solid rgba(0,255,0,0.5); border-radius: 16px; pointer-events: none; z-index: 2; transition: border-color 0.2s; }
+    .guide-barcode { position: absolute; top: 50%; left: 50%; transform: translate(-50%,-50%); width: 75%; max-width: 320px; height: 100px; border: 3px solid rgba(0,255,0,0.5); border-radius: 12px; pointer-events: none; z-index: 2; transition: border-color 0.2s; }
+    .guide-scanning { border-color: rgba(255,235,59,0.8) !important; }
 
     .btn-scan-big {
       position: absolute; bottom: 20px; left: 50%; transform: translateX(-50%);
@@ -64,7 +61,6 @@
     .btn-scan-big:active { opacity: 1; }
     .btn-scan-big:disabled { background: #555 !important; opacity: 0.5; }
 
-    /* ── Status bar ── */
     .status-bar { padding: 12px; text-align: center; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 6px; }
     .status-row { display: flex; align-items: center; gap: 8px; font-weight: 600; font-size: 0.95rem; }
     .status-row.success { color: #4caf50; }
@@ -72,13 +68,15 @@
     .status-row.error { color: #f44336; }
     .status-row.ready { color: #b0bec5; }
     .last-code { font-size: 0.85rem; color: #888; }
+
+    /* Barra de progreso de ráfaga */
+    .burst-bar { position: absolute; bottom: 90px; left: 50%; transform: translateX(-50%); width: 60%; max-width: 280px; height: 6px; background: rgba(255,255,255,0.15); border-radius: 3px; z-index: 6; display: none; }
+    .burst-bar-fill { height: 100%; background: #ffeb3b; border-radius: 3px; width: 0%; transition: width 0.15s linear; }
   </style>
 </head>
 <body>
 
-  <!-- ══════════════════════════════════════ -->
-  <!--  PANTALLA 1: SINCRONIZACIÓN           -->
-  <!-- ══════════════════════════════════════ -->
+  <!-- ══════════ PANTALLA 1: SINCRONIZACIÓN ══════════ -->
   <div id="syncScreen">
     <span class="material-symbols-outlined" style="font-size:64px; color:#ff6f00;">qr_code_scanner</span>
     <h2>Escáner Móvil</h2>
@@ -114,9 +112,7 @@
     </div>
   </div>
 
-  <!-- ══════════════════════════════════════ -->
-  <!--  PANTALLA 2: LECTOR QR VINCULACIÓN    -->
-  <!-- ══════════════════════════════════════ -->
+  <!-- ══════════ PANTALLA 2: QR VINCULACIÓN ══════════ -->
   <div id="qrReader">
     <div class="header header-main header-with-action">
       <button class="btn-header btn-header-gray" onclick="cerrarSyncQR()">
@@ -127,10 +123,11 @@
       </div>
       <div style="width:90px;"></div>
     </div>
-    <div class="camera-area">
+    <div class="camera-area" id="qrCameraArea">
       <video id="qrVideo" autoplay playsinline muted></video>
       <canvas id="qrCanvas"></canvas>
-      <div class="guide-qr"></div>
+      <div class="guide-qr" id="guideQR"></div>
+      <div class="burst-bar" id="qrBurstBar"><div class="burst-bar-fill" id="qrBurstFill"></div></div>
       <button class="btn-scan-big" style="background:rgba(255,165,0,0.85);" id="btnSyncScan" onclick="escanearQRSync()">
         <span class="material-symbols-outlined">center_focus_strong</span> ESCANEAR
       </button>
@@ -143,9 +140,7 @@
     </div>
   </div>
 
-  <!-- ══════════════════════════════════════ -->
-  <!--  PANTALLA 3: ESCÁNER DE LIBROS        -->
-  <!-- ══════════════════════════════════════ -->
+  <!-- ══════════ PANTALLA 3: ESCÁNER LIBROS ══════════ -->
   <div id="scanner">
     <div class="header header-main header-with-action">
       <button class="btn-header btn-header-orange" onclick="desconectar()">
@@ -156,10 +151,11 @@
       </div>
       <span class="badge" id="badgeCaja">CAJA 1</span>
     </div>
-    <div class="camera-area">
+    <div class="camera-area" id="scanCameraArea">
       <video id="camera-stream" autoplay playsinline muted></video>
       <canvas id="scanCanvas"></canvas>
-      <div class="guide-barcode"></div>
+      <div class="guide-barcode" id="guideBarcode"></div>
+      <div class="burst-bar" id="scanBurstBar"><div class="burst-bar-fill" id="scanBurstFill"></div></div>
       <button class="btn-scan-big" style="background:rgba(46,125,50,0.85);" id="btnScan" onclick="escanear()">
         <span class="material-symbols-outlined">center_focus_strong</span> ESCANEAR
       </button>
@@ -178,6 +174,10 @@
     var CAJA = '1';
     var stream = null;
     var syncStream = null;
+
+    // ── Configuración de ráfaga ──
+    var BURST_FRAMES = 10;        // Número de capturas por ráfaga
+    var BURST_INTERVAL_MS = 150;  // ms entre cada captura (total ~1.5s)
 
     // ── Persistencia ──
     function guardar() {
@@ -215,10 +215,11 @@
     function desconectar() { cerrarCamara(); mostrar('syncScreen'); }
     function toggleManual() { document.getElementById('manualConfig').classList.toggle('visible'); }
 
-    // ══════════════════════════════════════
+    // ══════════════════════════════════════════════════
     //  DECODIFICAR CANVAS (doble motor)
-    // ══════════════════════════════════════
+    // ══════════════════════════════════════════════════
     async function decodificarCanvas(canvas, formats) {
+      // 1. BarcodeDetector nativo
       if ('BarcodeDetector' in window) {
         try {
           var det = new BarcodeDetector({ formats: formats });
@@ -226,6 +227,7 @@
           if (barcodes.length > 0) return barcodes[0].rawValue;
         } catch(e) {}
       }
+      // 2. ZXing bajo nivel
       try {
         var ctx = canvas.getContext('2d');
         var imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
@@ -253,6 +255,61 @@
         return result.getText();
       } catch(e) {}
       return null;
+    }
+
+    // ══════════════════════════════════════════════════
+    //  RÁFAGA: captura N frames y decodifica cada uno
+    //  Se detiene en cuanto uno devuelve resultado
+    // ══════════════════════════════════════════════════
+    function burstScan(videoEl, canvas, formats, barEl, fillEl, guideEl) {
+      return new Promise(function(resolve) {
+        var ctx = canvas.getContext('2d');
+        var frame = 0;
+        var found = false;
+
+        barEl.style.display = 'block';
+        fillEl.style.width = '0%';
+        if (guideEl) guideEl.classList.add('guide-scanning');
+
+        var interval = setInterval(function() {
+          if (found) return;
+          frame++;
+
+          // Actualizar barra de progreso
+          var pct = Math.round((frame / BURST_FRAMES) * 100);
+          fillEl.style.width = pct + '%';
+
+          // Capturar frame
+          canvas.width = videoEl.videoWidth;
+          canvas.height = videoEl.videoHeight;
+          ctx.drawImage(videoEl, 0, 0);
+
+          // Intentar decodificar este frame
+          decodificarCanvas(canvas, formats).then(function(code) {
+            if (code && code.length >= 4 && !found) {
+              found = true;
+              clearInterval(interval);
+              fillEl.style.width = '100%';
+              if (guideEl) guideEl.classList.remove('guide-scanning');
+              setTimeout(function() { barEl.style.display = 'none'; }, 300);
+              resolve(code);
+            }
+          });
+
+          // Si llegamos al final de la ráfaga sin resultado
+          if (frame >= BURST_FRAMES) {
+            clearInterval(interval);
+            // Esperar un poco por si el último frame aún se está procesando
+            setTimeout(function() {
+              if (!found) {
+                barEl.style.display = 'none';
+                if (guideEl) guideEl.classList.remove('guide-scanning');
+                resolve(null);
+              }
+            }, 500);
+          }
+        }, BURST_INTERVAL_MS);
+      });
     }
 
     // ══════════════════════════════════════
@@ -292,38 +349,32 @@
       }
 
       btn.disabled = true;
-      setQRStatus('Analizando...', 'sending', 'search');
+      setQRStatus('Escaneando...', 'sending', 'search');
       if (navigator.vibrate) navigator.vibrate(50);
 
-      canvas.width = videoEl.videoWidth;
-      canvas.height = videoEl.videoHeight;
-      canvas.getContext('2d').drawImage(videoEl, 0, 0);
+      var data = await burstScan(
+        videoEl, canvas, ['qr_code'],
+        document.getElementById('qrBurstBar'),
+        document.getElementById('qrBurstFill'),
+        document.getElementById('guideQR')
+      );
 
-      var timeout = new Promise(function(_, reject) {
-        setTimeout(function() { reject(new Error('Timeout')); }, 5000);
-      });
-
-      try {
-        var data = await Promise.race([decodificarCanvas(canvas, ['qr_code']), timeout]);
-        if (data) {
-          try {
-            var config = JSON.parse(data);
-            if (config.url && config.caja) {
-              API_URL = config.url;
-              CAJA = String(config.caja);
-              guardar();
-              cerrarSyncStream();
-              if (navigator.vibrate) navigator.vibrate([100, 50, 100]);
-              setQRStatus('Vinculado a Caja ' + CAJA + ' ✓', 'success', 'check_circle');
-              setTimeout(function() { iniciarEscaneo(); }, 800);
-              return;
-            }
-          } catch(e) {}
-          setQRStatus('QR no válido — usa el QR de la Caja', 'error', 'warning');
-        } else {
-          setQRStatus('No se detectó QR — reintenta', 'error', 'warning');
-        }
-      } catch(e) {
+      if (data) {
+        try {
+          var config = JSON.parse(data);
+          if (config.url && config.caja) {
+            API_URL = config.url;
+            CAJA = String(config.caja);
+            guardar();
+            cerrarSyncStream();
+            if (navigator.vibrate) navigator.vibrate([100, 50, 100]);
+            setQRStatus('Vinculado a Caja ' + CAJA + ' ✓', 'success', 'check_circle');
+            setTimeout(function() { iniciarEscaneo(); }, 800);
+            return;
+          }
+        } catch(e) {}
+        setQRStatus('QR no válido — usa el QR de la Caja', 'error', 'warning');
+      } else {
         setQRStatus('No se detectó QR — reintenta', 'error', 'warning');
       }
 
@@ -384,28 +435,20 @@
       }
 
       btn.disabled = true;
-      setStatus('Analizando...', 'sending', 'search');
+      setStatus('Escaneando...', 'sending', 'search');
       if (navigator.vibrate) navigator.vibrate(50);
 
-      canvas.width = videoEl.videoWidth;
-      canvas.height = videoEl.videoHeight;
-      canvas.getContext('2d').drawImage(videoEl, 0, 0);
+      var code = await burstScan(
+        videoEl, canvas,
+        ['ean_13', 'ean_8', 'qr_code', 'code_128', 'upc_a', 'upc_e'],
+        document.getElementById('scanBurstBar'),
+        document.getElementById('scanBurstFill'),
+        document.getElementById('guideBarcode')
+      );
 
-      var timeout = new Promise(function(_, reject) {
-        setTimeout(function() { reject(new Error('Timeout')); }, 5000);
-      });
-
-      try {
-        var code = await Promise.race([
-          decodificarCanvas(canvas, ['ean_13', 'ean_8', 'qr_code', 'code_128', 'upc_a', 'upc_e']),
-          timeout
-        ]);
-        if (code && code.length >= 8) {
-          enviarALaCaja(code);
-        } else {
-          noDetectado();
-        }
-      } catch(e) {
+      if (code && code.length >= 8) {
+        enviarALaCaja(code);
+      } else {
         noDetectado();
       }
     }
